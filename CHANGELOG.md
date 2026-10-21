@@ -4,6 +4,22 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0]
+
+### Added
+
+- `ladder` profile: starts on up to two healthy free models and climbs to paid DeepSeek Flash, then Kimi K3, only when a rung fails. Free rungs get one retry, since a rate-limited free endpoint tends to stay limited.
+- `autoResolve` for batches: a task whose branch conflicts during autoMerge gets the merged branch brought into its worktree, and its own worker resolves the conflict and re-runs verify before it is merged.
+- `review` for batches: a read-only reviewer (the `reviewModel` setting, free by default) checks each task's diff against its prompt, and the report flags concerns.
+- Tasks with `dependsOn` start from their dependencies' branches, so one batch can chain implement, test and document steps.
+- `/opencode selftest`: checks the opencode CLI, git, the hang watchdog, rate-limit detection, notifications and the report folder on this machine.
+- `AGENTS.md`: the layout, rules and test commands for agents working on the mod.
+- The short report marks a finished task that changed nothing in its worktree.
+
+### Fixed
+
+- Workers now run in their own folder. opencode reads its project folder from `$PWD`, which spawned workers inherited from Claude Code, so a worker could edit the user's main checkout instead of its worktree.
+
 ## [0.5.0]
 
 ### Added

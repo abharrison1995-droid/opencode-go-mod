@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { MODELS, RUN } from './testkit'
 
-type SpawnCall = { argv: string[]; cwd?: string }
+type SpawnCall = { argv: string[]; cwd?: string; env?: Record<string, string> }
 type RunCall = { argv: string[]; init?: unknown }
 
 type Options = {
@@ -45,7 +45,7 @@ function engine(on: any, o: Options = {}) {
     return plain()
   })
   on('process.spawn', async function* (_: any, e: any) {
-    spawned.push({ argv: [...e.argv], cwd: e.cwd })
+    spawned.push({ argv: [...e.argv], cwd: e.cwd, env: e.env })
     if (o.spawn !== undefined) return yield* o.spawn(e)
     yield { stream: 'stdout', text: RUN + '\n' }
     return { value: { code: 0, signal: null } }
@@ -80,6 +80,23 @@ test('delegate puts the working folder in cwd and a -- before the prompt', async
 
   await $.tool.call(delegate({ prompt: 'again', dir: '/abs/x/../y' }) as any)
   expect(spawned[1].cwd).toBe('/abs/y')
+})
+
+test('workers get PWD set to their folder, so opencode does not use the host folder', async ($, on) => {
+  const spawned: SpawnCall[] = []
+  engine(on, { spawned })
+  await start($, '/proj')
+
+  await $.tool.call(delegate({ prompt: 'here' }) as any)
+  expect(spawned[0].cwd).toBe('/proj')
+  expect(spawned[0].env).toEqual({ PWD: '/proj' })
+
+  await $.tool.call(delegate({ prompt: 'there', dir: 'sub' }) as any)
+  expect(spawned[1].env).toEqual({ PWD: '/proj/sub' })
+
+  const ran = await $.tool.call(batch({ title: 'b', isolation: 'none', tasks: [{ id: 'a', prompt: 'x' }] }) as any)
+  expect((ran as any).deny).toBeUndefined()
+  expect(spawned[2].env).toEqual({ PWD: '/proj' })
 })
 
 test('readOnly runs opencode plan agent', async ($, on) => {

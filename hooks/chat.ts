@@ -6,7 +6,7 @@ import type { Effort, WorkerModel } from '../types'
 // OpenCode lists Claude Code as a validated Go client; Zen's free tier serves only OpenCode itself,
 // so chat mode runs on opencode-go/* models alone.
 export const ENDPOINT = 'https://opencode.ai/inference/go/anthropic/v1/messages'
-const USER_AGENT = 'claude-code-opencode-go-mod/0.5'
+const USER_AGENT = 'claude-code-opencode-go-mod/0.6'
 
 const THINKING: Record<Effort, number> = { low: 2_048, medium: 8_192, high: 16_384, xhigh: 32_768, max: 64_000 }
 

@@ -129,7 +129,6 @@ async function makeDir(
   taskId: string,
   from: readonly string[],
 ): Promise<{ dir: string; branch?: string }> {
-  void from
   if (mode === 'none') return { dir: base }
 
   if (mode === 'copy') {
@@ -146,8 +145,22 @@ async function makeDir(
   const top = found.stdout.trim()
   const folder = `${top}-opencode/${batchId}-${taskId}`
   const branch = `oc/${batchId}-${taskId}`
-  const added = await git($, ['git', '-C', top, 'worktree', 'add', '-b', branch, folder, 'HEAD'])
+  const added = await git($, ['git', '-C', top, 'worktree', 'add', '-b', branch, folder, from[0] ?? 'HEAD'])
   if (added.exitCode !== 0) throw new Error(added.stderr.trim() || `git worktree add failed for ${folder}`)
+  for (const b of from.slice(1)) {
+    const merged = await git($, [
+      'git', '-C', folder, '-c', 'user.name=OpenCode worker', '-c', 'user.email=opencode-worker@localhost',
+      'merge', '--no-ff', '--no-edit', b,
+    ])
+    if (merged.exitCode === 0) continue
+    // Read the conflict list before the abort clears it.
+    const conflicts = await git($, ['git', '-C', folder, 'diff', '--name-only', '--diff-filter=U'])
+    await git($, ['git', '-C', folder, 'merge', '--abort'])
+    await git($, ['git', '-C', top, 'worktree', 'remove', '--force', folder])
+    await git($, ['git', '-C', top, 'branch', '-D', branch])
+    const files = conflicts.stdout.trim()
+    throw new Error(`dependencies ${from[0]} and ${b} conflict${files === '' ? '' : `: ${files.split('\n').filter(l => l.trim() !== '').join(', ')}`}`)
+  }
   const rel = base === top ? '' : base.startsWith(`${top}/`) ? base.slice(top.length + 1) : ''
   return { dir: rel ? `${folder}/${rel}` : folder, branch }
 }

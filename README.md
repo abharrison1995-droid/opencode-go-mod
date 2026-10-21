@@ -38,7 +38,10 @@ In the desktop app, where `/plugin` does not run: click + next to the prompt box
 - Each model is rated good, shaky or bad; unreliable models are flagged in the tool description.
 - Batch history and spend by model are kept.
 - A `profile` (cheap, reliable or strong) sets a preset model and reasoning level.
-- `autoMerge` merges passing worktree tasks into `oc/<batch>-merged`.
+- `autoMerge` merges passing worktree tasks into `oc/<batch>-merged`; `autoResolve` has a task's own worker fix a merge conflict.
+- `review` has a free model check each task's diff, so Claude reads only flagged tasks.
+- The `ladder` profile starts on healthy free models and escalates to paid ones only on failure.
+- Tasks with `dependsOn` build on their dependencies' branches.
 - The OpenCode panel and `/opencode` commands cover models, reasoning, presets, batches, history and cancel.
 - Chat mode answers turns through OpenCode Go's Anthropic-compatible endpoint.
 
@@ -75,6 +78,7 @@ On mobile the panel is compact: it shows the worker, reasoning and presets, rece
 | `/opencode preset [name]` | Applies a preset (`cheap`, `reliable`, `strong`) or lists them. |
 | `/opencode models [free\|paid]` | Lists models with free status or price. |
 | `/opencode status` | Shows the worker, chat mode, running jobs and spend. |
+| `/opencode selftest` | Checks the CLI, git, hang detection, rate-limit detection, notifications and the report folder. |
 | `/opencode batches` | Lists this chat's batches and their task states. |
 | `/opencode history` | Lists recent finished batches and spend by model. |
 | `/opencode cancel <id>\|all` | Stops a job, a batch or every run. |
@@ -93,6 +97,7 @@ On mobile the panel is compact: it shows the worker, reasoning and presets, rece
 | `fallbackModel` | Model a run switches to after the picked one keeps failing (429s, hangs). Empty: no fallback. | `opencode-go/deepseek-v4.1-flash` |
 | `autoRetries` | How many times a failed or hung opencode run is resumed before giving up (and trying the fallback model). | `3` |
 | `stallMinutes` | A run that prints nothing for this long is killed and resumed. | `10` |
+| `reviewModel` | Model that reviews batch tasks when `review` is on. | `opencode/deepseek-v4.1-flash-free` |
 | `dailyBudget` | No new paid runs start once today's OpenCode spend reaches this. 0: no limit. | `0` |
 
 Change these with `/plugin configure opencode-go@opencode-go-mod` in a terminal session, or in the plugin settings in the desktop app.

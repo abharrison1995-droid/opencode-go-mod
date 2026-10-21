@@ -1,6 +1,6 @@
 {
   "name": "opencode-go",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Lets Claude delegate tasks to OpenCode Go models, picked in an OpenCode panel with FREE and PAID sections and a reasoning level.",
   "author": {
     "name": "abharrison1995-droid",

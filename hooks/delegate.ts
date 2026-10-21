@@ -157,7 +157,10 @@ export async function runOpencode(
     return { run, end, stderr, reason: 'cancelled' }
   }
   const host = timers()
-  const stream = $.process.spawn({ argv, cwd })[Symbol.asyncIterator]()
+  // opencode takes its project folder from $PWD before its real cwd, and a spawn inherits the
+  // host's $PWD, so without this every worker would start in the folder Claude Code started in.
+  const env = cwd !== undefined && cwd.startsWith('/') ? { PWD: cwd } : undefined
+  const stream = $.process.spawn(env === undefined ? { argv, cwd } : { argv, cwd, env })[Symbol.asyncIterator]()
   while (!cancelled) {
     if (o.signal?.aborted === true) {
       cancelled = true

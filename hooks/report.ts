@@ -141,6 +141,8 @@ export function batchShortReport(o: { batch: Batch; extras: ReportExtras; path: 
     if (review !== undefined) parts.push(review.verdict === 'ok' ? 'review ✓' : review.verdict === 'concerns' ? 'review ⚠' : 'review ?')
     const stat = statSummary(extras.diffs?.[task.id])
     if (stat !== undefined) parts.push(stat)
+    // A done task whose worktree is untouched usually edited files somewhere else.
+    else if (task.status === 'done' && task.branch !== undefined) parts.push('no changes ⚠')
     if (task.branch !== undefined) parts.push(task.branch)
     lines.push(parts.join(' · '))
   }
