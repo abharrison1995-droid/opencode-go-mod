@@ -125,6 +125,14 @@ test('a rejected notification is a failed check, not a throw', async () => {
   expect(checks[5].detail).toContain('no surface')
 })
 
+test('a notification no surface took is a failed check', async () => {
+  const fake = fakeEngine({ notify: async () => ({ isSent: false, reason: 'no-surface' }) })
+  const checks = await selfTest(fake.$, { bin: '/usr/bin/opencode', dir: '/proj' })
+
+  expect(checks[5].ok).toBe(false)
+  expect(checks[5].detail).toContain('not delivered (no-surface)')
+})
+
 test('formatChecks ends with the pass summary', () => {
   const text = formatChecks([
     { name: 'first', ok: true, detail: 'yes' },

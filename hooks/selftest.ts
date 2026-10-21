@@ -85,9 +85,13 @@ export async function selfTest($: EngineInterface, o: { bin?: string; dir: strin
 
   checks.push(
     await guard('notification', async () => {
-      const sent = await $.ui.notify('OpenCode self-test: notifications work', { title: 'OpenCode' })
-      const detail = JSON.stringify(sent) ?? String(sent)
-      return { ok: true, detail: detail.slice(0, 200) }
+      const sent: unknown = await $.ui.notify('OpenCode self-test: notifications work', { title: 'OpenCode' })
+      // The host answers { isSent: false, reason } when no surface took the notification.
+      if (typeof sent === 'object' && sent !== null && (sent as { isSent?: unknown }).isSent === false) {
+        const why = String((sent as { reason?: unknown }).reason ?? 'unknown')
+        return { ok: false, detail: `not delivered (${why})${why === 'no-surface' ? ': no phone or desktop app took it; check notifications are on for Claude' : ''}` }
+      }
+      return { ok: true, detail: (JSON.stringify(sent) ?? String(sent)).slice(0, 200) }
     }),
   )
 

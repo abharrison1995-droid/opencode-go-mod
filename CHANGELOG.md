@@ -4,6 +4,16 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.1]
+
+### Added
+
+- Unit tests for `rate()` and `presetNamed`, and README sections on model health and troubleshooting (written by free OpenCode workers in a ladder, review and autoResolve batch).
+
+### Fixed
+
+- `/opencode selftest` reports a notification no surface took as failed instead of passed.
+
 ## [0.6.0]
 
 ### Added
