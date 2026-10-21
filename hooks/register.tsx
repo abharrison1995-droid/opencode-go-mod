@@ -470,7 +470,7 @@ function laterRungs(rungs: Rung[], models: WorkerModel[]) {
   return rungs.slice(1).map(rung => {
     const known = models.find(m => m.id === rung.model)
     const fits = rung.effort !== undefined && (known === undefined || known.efforts.includes(rung.effort))
-    return { model: rung.model, level: fits ? rung.effort : undefined }
+    return { model: rung.model, level: fits ? rung.effort : undefined, retries: rung.retries }
   })
 }
 
@@ -907,6 +907,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
           model,
           fallback,
           fallbacks: laterRungs(rungs, allModels),
+          firstRetries: rungs[0]?.retries,
           level,
           prompt: input.prompt,
           cwd: dir,
@@ -1156,6 +1157,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
             model: task.model,
             fallback,
             fallbacks: laterRungs(ladders.get(task.id) ?? [], models),
+            firstRetries: ladders.get(task.id)?.[0]?.retries,
             level: task.effort,
             prompt: spec.prompt,
             cwd: prepared.dir,
