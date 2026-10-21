@@ -125,12 +125,20 @@ test('a rejected notification is a failed check, not a throw', async () => {
   expect(checks[5].detail).toContain('no surface')
 })
 
-test('a notification no surface took is a failed check', async () => {
+test('no terminal to notify (desktop, phone) passes with a note', async () => {
   const fake = fakeEngine({ notify: async () => ({ isSent: false, reason: 'no-surface' }) })
   const checks = await selfTest(fake.$, { bin: '/usr/bin/opencode', dir: '/proj' })
 
+  expect(checks[5].ok).toBe(true)
+  expect(checks[5].detail).toContain('only a terminal')
+})
+
+test('notifications turned off is a failed check', async () => {
+  const fake = fakeEngine({ notify: async () => ({ isSent: false, reason: 'disabled' }) })
+  const checks = await selfTest(fake.$, { bin: '/usr/bin/opencode', dir: '/proj' })
+
   expect(checks[5].ok).toBe(false)
-  expect(checks[5].detail).toContain('not delivered (no-surface)')
+  expect(checks[5].detail).toContain('not delivered (disabled)')
 })
 
 test('formatChecks ends with the pass summary', () => {

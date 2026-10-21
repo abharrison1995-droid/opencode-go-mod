@@ -86,10 +86,12 @@ export async function selfTest($: EngineInterface, o: { bin?: string; dir: strin
   checks.push(
     await guard('notification', async () => {
       const sent: unknown = await $.ui.notify('OpenCode self-test: notifications work', { title: 'OpenCode' })
-      // The host answers { isSent: false, reason } when no surface took the notification.
+      // The host answers { isSent: false, reason } when no channel sent it. Notifications reach only a
+      // terminal, so no-surface (the desktop app, a phone) is expected there; batches toast as well.
       if (typeof sent === 'object' && sent !== null && (sent as { isSent?: unknown }).isSent === false) {
         const why = String((sent as { reason?: unknown }).reason ?? 'unknown')
-        return { ok: false, detail: `not delivered (${why})${why === 'no-surface' ? ': no phone or desktop app took it; check notifications are on for Claude' : ''}` }
+        if (why === 'no-surface') return { ok: true, detail: 'not used here: notifications reach only a terminal; batches show a toast instead' }
+        return { ok: false, detail: `not delivered (${why})${why === 'disabled' ? ': notifications are turned off in Claude Code settings' : ''}` }
       }
       return { ok: true, detail: (JSON.stringify(sent) ?? String(sent)).slice(0, 200) }
     }),

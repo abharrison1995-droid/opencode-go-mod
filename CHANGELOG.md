@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.2]
+
+### Fixed
+
+- `/opencode selftest` passes the notification check with a note where no terminal is attached (the desktop app, a phone). Notifications reach only a terminal there, and batches show a toast instead. Notifications turned off still fail the check.
+
 ## [0.6.1]
 
 ### Added
