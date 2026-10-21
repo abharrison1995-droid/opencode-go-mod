@@ -2,6 +2,10 @@
   "name": "opencode-go",
   "version": "0.5.0",
   "description": "Lets Claude delegate tasks to OpenCode Go models, picked in an OpenCode panel with FREE and PAID sections and a reasoning level.",
+  "author": {
+    "name": "abharrison1995-droid",
+    "url": "https://github.com/abharrison1995-droid"
+  },
   "userConfig": {
     "defaultModel": {
       "type": "string",
@@ -38,6 +42,12 @@
       "title": "Daily budget (USD)",
       "description": "No new paid runs start once today's OpenCode spend reaches this. 0: no limit.",
       "default": 0
+    },
+    "reviewModel": {
+      "type": "string",
+      "title": "Review model",
+      "description": "Model that reviews batch tasks when delegate_batch is called with review: true. A free model is enough.",
+      "default": "opencode/deepseek-v4.1-flash-free"
     }
   },
   "types": "./types/index.d.ts"

@@ -10,9 +10,14 @@ import { cancel, track, tracked, untrack } from './control'
 import { attachedChars, budgetMessage, contextVerdict, contextWarning, dailySpent, formatReport, localDate, notify, overContext, resolveDir, runResilient } from './delegate'
 import { branchDiff, discardTask, mergeBranch, worktreeFolder } from './git'
 import { recordRun } from './health'
+import { ladder } from './ladder'
+import type { Rung } from './ladder'
 import { PRESETS, presetNamed, rate } from './presets'
 import { batchReport, batchShortReport, changedFiles, delegateShort, writeReport } from './report'
 import type { ReportExtras } from './report'
+import { resolveConflict } from './resolve'
+import { reviewTask } from './review'
+import { formatChecks, selfTest } from './selftest'
 
 const catalog = atom({ plugin: 'opencode-go', key: 'catalog' } as const, { status: 'loading', models: [] } as Catalog)
 const picked = atom({ plugin: 'opencode-go', key: 'model' } as const, '')
@@ -52,7 +57,7 @@ The worker sees nothing of this conversation: put everything it needs in the pro
 
 Give every coding task a verify command (e.g. npm test) so failures are fixed by the worker, not by you. Runs resume themselves after rate limits, hangs and failures, and fall back to the fallback model. The user can cancel a run from the OpenCode panel.
 
-Set profile to cheap, reliable or strong to pick a preset model and reasoning level (an explicit model or effort wins). Report defaults to short with the full report in a file; pass full to read it inline.
+Set profile to cheap, reliable or strong to pick a preset model and reasoning level, or ladder to start on a healthy free model and escalate to paid ones if it fails (an explicit model or effort wins). Report defaults to short with the full report in a file; pass full to read it inline.
 
 Several delegate calls in one message may run one after another rather than together; for real parallel work use delegate_batch, which gives each worker its own folder.
 
@@ -75,7 +80,7 @@ async function registerTool($: EngineInterface, models: WorkerModel[]) {
       properties: {
         prompt: { type: 'string', description: 'The complete, self-contained task for the worker model.' },
         model: { type: 'string', description: 'provider/model (e.g. opencode-go/kimi-k3), or a bare id under opencode-go/. Default: the model picked in the OpenCode panel.' },
-        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong'], description: 'Preset model and reasoning level; an explicit model or effort wins.' },
+        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder'], description: 'Preset model and reasoning level; an explicit model or effort wins.' },
         effort: { type: 'string', enum: EFFORTS, description: 'Reasoning level. Default: the level picked in the OpenCode panel. Ignored by a model without that level.' },
         dir: { type: 'string', description: 'Directory the worker runs in (absolute, or relative to the session). Default: the session directory.' },
         sessionId: { type: 'string', description: 'An earlier sessionId from this tool, to continue that opencode session.' },
@@ -94,7 +99,7 @@ async function registerTool($: EngineInterface, models: WorkerModel[]) {
     name: 'delegate_batch',
     description: `Runs several opencode workers at once, each in its own git worktree (or a copy) so they never edit the same files. Tasks may depend on each other and start in dependency order. The report gives each task's status, cost, folder/branch, git diff --stat, actions and answer; review their branches and merge what is good.
 
-Use it for independent pieces of work that can run in parallel, or for a larger job split into clear parts. Workers see nothing of this conversation: put common context in shared and each task's own work in its prompt. Pass files to attach them. Give every coding task a verify command so failures are fixed by the worker, not by you. maxCost stops the batch starting more tasks once it has cost that much. Set profile (cheap, reliable, strong) for preset models and reasoning; autoMerge merges passing worktree tasks into a branch of its own.
+Use it for independent pieces of work that can run in parallel, or for a larger job split into clear parts. Workers see nothing of this conversation: put common context in shared and each task's own work in its prompt. Pass files to attach them. Give every coding task a verify command so failures are fixed by the worker, not by you. maxCost stops the batch starting more tasks once it has cost that much. Set profile (cheap, reliable, strong, or ladder: healthy free models first, escalating to paid) for preset models and reasoning; autoMerge merges passing worktree tasks into a branch of its own, autoResolve has workers fix their own merge conflicts, and review has a free model check each task's diff so you read only flagged ones. A task with dependsOn starts from its dependencies' branches.
 
 Runs resume themselves after rate limits, hangs and failures, and fall back to the fallback model. The user can cancel from the OpenCode panel. Report defaults to short with the full report in a file; pass full to read it inline.
 
@@ -109,7 +114,9 @@ With background true it returns at once and the report arrives as a new message 
         verify: { type: 'string', description: 'Default verify command for tasks without one. Strongly recommended for coding tasks.' },
         verifyRounds: { type: 'integer', minimum: 0, maximum: 5, description: 'Default verify fix-up rounds. Default 2.' },
         maxCost: { type: 'number', minimum: 0, description: 'USD; no more tasks start once the batch has cost this much.' },
-        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong'], description: 'Default preset model and reasoning for tasks; explicit model/effort wins.' },
+        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder'], description: 'Default preset model and reasoning for tasks; explicit model/effort wins.' },
+        autoResolve: { type: 'boolean', description: 'With autoMerge: a task that conflicts gets the merged branch brought into its worktree, its worker resolves the conflict, and it is merged. Default false.' },
+        review: { type: 'boolean', description: "After each task, a read-only reviewer (the reviewModel setting, free by default) checks its diff against its prompt; the report flags concerns. Default false." },
         autoMerge: { type: 'boolean', description: 'With worktree isolation, merge tasks whose verify passed (or that had none) into oc/<batch>-merged. Default false.' },
         report: { type: 'string', enum: ['short', 'full'], description: 'short (default): a compact summary with the full report in .opencode/reports. full: everything inline.' },
         tasks: {
@@ -123,7 +130,7 @@ With background true it returns at once and the report arrives as a new message 
               prompt: { type: 'string', description: 'The complete, self-contained task for this worker.' },
               title: { type: 'string', description: 'A short title for the report. Default: the id.' },
               model: { type: 'string', description: 'provider/model, or a bare id under opencode-go/. Default: the panel model.' },
-              profile: { type: 'string', enum: ['cheap', 'reliable', 'strong'], description: 'Preset model and reasoning for this task; an explicit model or effort wins.' },
+              profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder'], description: 'Preset model and reasoning for this task; an explicit model or effort wins.' },
               effort: { type: 'string', enum: EFFORTS, description: 'Reasoning level. Default: the panel level. Ignored by a model without that level.' },
               readOnly: { type: 'boolean', description: "Run the read-only plan agent (--agent plan) for this task." },
               dependsOn: { type: 'array', items: { type: 'string' }, description: 'Ids of tasks in this batch that must finish (done) first.' },
@@ -457,13 +464,28 @@ async function addHistory($: EngineInterface, batch: Batch) {
   await $.store.set('history', await read($, history))
 }
 
+// Ladder rungs after the first, as runResilient fallbacks, each with a level its model offers.
+function laterRungs(rungs: Rung[], models: WorkerModel[]) {
+  if (rungs.length < 2) return undefined
+  return rungs.slice(1).map(rung => {
+    const known = models.find(m => m.id === rung.model)
+    const fits = rung.effort !== undefined && (known === undefined || known.efforts.includes(rung.effort))
+    return { model: rung.model, level: fits ? rung.effort : undefined }
+  })
+}
+
 async function git($: EngineInterface, argv: string[]) {
   return $.process.run(argv).catch(err => ({ exitCode: 1, stdout: '', stderr: err instanceof Error ? err.message : String(err) }))
 }
 
 // Merges passing task branches into oc/<id>-merged through a temporary worktree, so the
 // user's checkout and current branch never move.
-async function autoMerge($: EngineInterface, batch: Batch, extras: ReportExtras) {
+async function autoMerge(
+  $: EngineInterface,
+  batch: Batch,
+  extras: ReportExtras,
+  resolve?: (task: BatchTask, files: string[]) => Promise<boolean>,
+) {
   if (batch.top === undefined) return
   const top = batch.top
   const branch = `oc/${batch.id}-merged`
@@ -489,6 +511,18 @@ async function autoMerge($: EngineInterface, batch: Batch, extras: ReportExtras)
       const conflicts = await git($, ['git', '-C', folder, 'diff', '--name-only', '--diff-filter=U'])
       const files = conflicts.exitCode === 0 ? conflicts.stdout.split('\n').map(line => line.trim()).filter(line => line !== '') : []
       await git($, ['git', '-C', folder, 'merge', '--abort'])
+      if (resolve !== undefined && (await resolve(task, files))) {
+        const again = await git($, ['git', '-C', folder, 'merge', '--no-ff', '--no-edit', task.branch])
+        if (again.exitCode === 0) {
+          task.merged = true
+          extras.merged ??= []
+          extras.merged.push(task.id)
+          extras.resolved ??= []
+          extras.resolved.push(task.id)
+          continue
+        }
+        await git($, ['git', '-C', folder, 'merge', '--abort'])
+      }
       extras.conflicts ??= {}
       extras.conflicts[task.id] = files
     }
@@ -548,6 +582,7 @@ export const register: Register = (on, options) => {
       '  /opencode resume <batch> <task> continue a failed or cancelled task',
       '  /opencode history              recent batches and spend by model',
       '  /opencode status               what is running and what it cost',
+      '  /opencode selftest             check hang detection, rate limits and notifications here',
       '  /opencode help                 this list',
     ].join('\n')
 
@@ -564,6 +599,8 @@ export const register: Register = (on, options) => {
     }
 
     if (sub === 'help') return { text: help }
+
+    if (sub === 'selftest') return { text: formatChecks(await selfTest($, { bin: await findOpencode($), dir: sessionCwd })) }
 
     if (sub === 'model') {
       if (rest === '') return { text: 'Usage: /opencode model <name>.' }
@@ -822,10 +859,12 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       return { deny: 'The opencode CLI is not installed or not on PATH. Ask the user to install it (npm i -g opencode-ai) and run `opencode auth login`, choosing OpenCode Go.' }
     }
 
-    const profile = typeof input.profile === 'string' ? presetNamed(input.profile) : undefined
-    const model = input.model ? fullId(input.model) : profile?.model ?? (await current($, defaultModel))
-    const wanted = input.effort ?? profile?.effort ?? (await read($, effort))
-    const known = (await read($, catalog)).models.find(m => m.id === model)
+    const allModels = (await read($, catalog)).models
+    const rungs = input.profile === 'ladder' && !input.model ? ladder(allModels, await read($, health)) : []
+    const profile = typeof input.profile === 'string' ? presetNamed(input.profile) ?? (input.profile === 'ladder' ? presetNamed('reliable') : undefined) : undefined
+    const model = input.model ? fullId(input.model) : rungs[0]?.model ?? profile?.model ?? (await current($, defaultModel))
+    const wanted = input.effort ?? rungs[0]?.effort ?? profile?.effort ?? (await read($, effort))
+    const known = allModels.find(m => m.id === model)
     const level = known === undefined || known.efforts.includes(wanted) ? wanted : undefined
 
     const dir = resolveDir(sessionCwd, input.dir)
@@ -867,6 +906,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
           bin,
           model,
           fallback,
+          fallbacks: laterRungs(rungs, allModels),
           level,
           prompt: input.prompt,
           cwd: dir,
@@ -964,6 +1004,8 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       maxCost?: number
       profile?: string
       autoMerge?: boolean
+      autoResolve?: boolean
+      review?: boolean
       report?: string
     }
     if (typeof input.title !== 'string' || input.title.trim() === '') return { deny: 'delegate_batch needs a title.' }
@@ -989,11 +1031,15 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const panelModel = await current($, defaultModel)
     const panelEffort = await read($, effort)
     const models = (await read($, catalog)).models
-    const batchProfile = typeof input.profile === 'string' ? presetNamed(input.profile) : undefined
+    const healthNow = await read($, health)
+    const ladders = new Map<string, Rung[]>()
     const choose = (t: TaskSpec) => {
-      const profile = typeof t.profile === 'string' ? presetNamed(t.profile) : batchProfile
-      const model = t.model ? fullId(t.model) : profile?.model ?? panelModel
-      const wanted = t.effort ?? profile?.effort ?? panelEffort
+      const name = typeof t.profile === 'string' ? t.profile : typeof input.profile === 'string' ? input.profile : undefined
+      const rungs = name === 'ladder' && !t.model ? ladder(models, healthNow) : []
+      if (rungs.length > 0) ladders.set(t.id, rungs)
+      const profile = name === undefined ? undefined : presetNamed(name) ?? (name === 'ladder' ? presetNamed('reliable') : undefined)
+      const model = t.model ? fullId(t.model) : rungs[0]?.model ?? profile?.model ?? panelModel
+      const wanted = t.effort ?? rungs[0]?.effort ?? profile?.effort ?? panelEffort
       const known = models.find(m => m.id === model)
       return { model, effort: known === undefined || known.efforts.includes(wanted) ? wanted : undefined }
     }
@@ -1015,6 +1061,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const dailyBudget = Number(options.dailyBudget ?? 0) || 0
     const fallbackSetting = String(options.fallbackModel ?? '')
     const fallback = fallbackSetting === '' ? undefined : fullId(fallbackSetting)
+    const reviewModel = fullId(String(options.reviewModel ?? 'opencode/deepseek-v4.1-flash-free'))
 
     const id = batchId()
     const batch: Batch = {
@@ -1086,7 +1133,9 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
 
       let prepared: { dir: string; branch?: string }
       try {
-        prepared = await prepareDir($, isolation, base, id, task.id)
+        // A dependent task builds on its dependencies' work, not on the batch's starting point.
+        const from = task.dependsOn.map(dep => batch.tasks.find(t => t.id === dep)?.branch).filter((b): b is string => b !== undefined)
+        prepared = await prepareDir($, isolation, base, id, task.id, from)
       } catch (err) {
         return { status: 'failed' as const, cost: 0, steps: 0, error: err instanceof Error ? err.message : String(err) }
       }
@@ -1106,6 +1155,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
             bin,
             model: task.model,
             fallback,
+            fallbacks: laterRungs(ladders.get(task.id) ?? [], models),
             level: task.effort,
             prompt: spec.prompt,
             cwd: prepared.dir,
@@ -1152,6 +1202,14 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
           const stat = await commitTask($, prepared.dir, `opencode ${id}/${task.id}: ${task.title}`)
           if (stat !== undefined && stat !== '') extras.diffs![task.id] = stat
         }
+        let reviewCost = 0
+        if (input.review === true && !failed && prepared.branch !== undefined && batch.base !== undefined) {
+          const review = await reviewTask($, { bin, dir: prepared.dir, base: batch.base, prompt: spec.prompt, model: reviewModel, retries, stallMs, fallback, signal })
+          extras.reviews ??= {}
+          extras.reviews[task.id] = { verdict: review.verdict, notes: review.notes }
+          reviewCost = review.cost
+          if (review.cost > 0) await addSpend($, review.cost, review.model)
+        }
         if (verdict !== undefined && verdict.level === 'warn') {
           extras.warnings ??= {}
           extras.warnings[task.id] = contextWarning(verdict)
@@ -1159,7 +1217,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
 
         const result: TaskResult = {
           status: outcome.reason === 'cancelled' ? 'cancelled' : failed ? 'failed' : 'done',
-          cost: outcome.run.cost,
+          cost: outcome.run.cost + reviewCost,
           steps: outcome.run.tools.length,
           dir: prepared.dir,
           attempts: outcome.attempts,
@@ -1176,6 +1234,32 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       }
     }
 
+    // autoResolve: the conflicting task's own worker merges the integration branch in and fixes it.
+    const resolver = async (task: BatchTask, conflictFiles: string[]) => {
+      const spec = specsById.get(task.id)
+      if (spec === undefined || task.dir === undefined || batch.integration === undefined) return false
+      const outcome = await resolveConflict($, {
+        bin,
+        dir: task.dir,
+        integration: batch.integration,
+        files: conflictFiles,
+        sessionId: task.sessionId,
+        prompt: spec.prompt,
+        model: task.model,
+        level: task.effort,
+        verify: spec.verify,
+        verifyRounds: spec.verifyRounds ?? 2,
+        retries,
+        stallMs,
+        fallback,
+        autoApprove: input.autoApprove,
+        signal: batchSignal,
+      })
+      task.cost += outcome.cost
+      if (outcome.cost > 0) await addSpend($, outcome.cost, outcome.model)
+      return outcome.ok
+    }
+
     const finish = async () => {
       batch.status =
         batchSignal.aborted || batch.tasks.some(t => t.status === 'cancelled')
@@ -1186,7 +1270,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       batch.endedAt = Date.now()
       await sync()
       await showStatus($)
-      if (input.autoMerge === true && isolation === 'worktree') await autoMerge($, batch, extras)
+      if (input.autoMerge === true && isolation === 'worktree') await autoMerge($, batch, extras, input.autoResolve === true ? resolver : undefined)
       const full = batchReport(batch, extras)
       const path = await writeReport($, base, id, full)
       batch.reportPath = path

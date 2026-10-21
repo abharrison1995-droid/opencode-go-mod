@@ -114,8 +114,9 @@ export function prepareDir(
   base: string,
   batchId: string,
   taskId: string,
+  from: readonly string[] = [],
 ): Promise<{ dir: string; branch?: string }> {
-  const made = preparing.then(() => makeDir($, mode, base, batchId, taskId))
+  const made = preparing.then(() => makeDir($, mode, base, batchId, taskId, from))
   preparing = made.catch(() => undefined)
   return made
 }
@@ -126,7 +127,9 @@ async function makeDir(
   base: string,
   batchId: string,
   taskId: string,
+  from: readonly string[],
 ): Promise<{ dir: string; branch?: string }> {
+  void from
   if (mode === 'none') return { dir: base }
 
   if (mode === 'copy') {

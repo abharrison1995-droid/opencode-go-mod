@@ -1,6 +1,9 @@
 {
   "name": "opencode-go-mod",
-  "owner": { "name": "abharrison1995-droid" },
+  "description": "Claude Code mods for delegating work to OpenCode Go models.",
+  "owner": {
+    "name": "abharrison1995-droid"
+  },
   "plugins": [
     {
       "name": "opencode-go",

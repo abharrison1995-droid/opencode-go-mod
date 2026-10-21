@@ -23,6 +23,8 @@ export type ResilientOptions = {
   bin: string
   model: string
   fallback?: string
+  // When set, used instead of fallback: each rung in turn, with its own retries.
+  fallbacks?: { model: string; level?: string }[]
   level?: string
   prompt: string
   cwd: string | undefined

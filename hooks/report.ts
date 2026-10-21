@@ -6,7 +6,13 @@ import type { EndReason, Run, RunEnd, VerifyResult } from './delegate'
 
 // Auto-merge's outcome the panel's Batch does not carry: merged ids and each
 // conflicting task's files. Kept beside the run so both reports can show them.
-export type ReportExtras = BatchExtras & { merged?: string[]; conflicts?: Record<string, string[]> }
+export type ReportExtras = BatchExtras & {
+  merged?: string[]
+  conflicts?: Record<string, string[]>
+  // Conflicts a worker resolved, so the task merged on a second try.
+  resolved?: string[]
+  reviews?: Record<string, { verdict: 'ok' | 'concerns' | 'error'; notes: string }>
+}
 
 const ANSWER = 1200
 const ERROR = 600
@@ -110,6 +116,7 @@ function mergeLines(batch: Batch, extras: ReportExtras): string[] {
 
   const lines: string[] = []
   if (merged.length > 0) lines.push(`Merged into ${integration ?? 'the integration branch'}: ${merged.join(', ')}`)
+  if ((extras.resolved ?? []).length > 0) lines.push(`Conflicts resolved by the worker: ${extras.resolved!.join(', ')}`)
   for (const [id, files] of conflicted) {
     lines.push(`Conflicts (not merged): ${id}${files.length > 0 ? ` (files: ${files.join(', ')})` : ''}`)
   }
@@ -130,10 +137,17 @@ export function batchShortReport(o: { batch: Batch; extras: ReportExtras; path: 
   for (const task of batch.tasks) {
     const parts = [`${ICONS[task.status]} ${task.id}`, task.status, shortModel(task.model), `$${task.cost.toFixed(4)}`, `try ${task.attempts ?? 1}`]
     if (task.verify !== undefined) parts.push(task.verify === 'passed' ? 'verify ✓' : 'verify ✗')
+    const review = extras.reviews?.[task.id]
+    if (review !== undefined) parts.push(review.verdict === 'ok' ? 'review ✓' : review.verdict === 'concerns' ? 'review ⚠' : 'review ?')
     const stat = statSummary(extras.diffs?.[task.id])
     if (stat !== undefined) parts.push(stat)
     if (task.branch !== undefined) parts.push(task.branch)
     lines.push(parts.join(' · '))
+  }
+
+  for (const task of batch.tasks) {
+    const review = extras.reviews?.[task.id]
+    if (review !== undefined && review.verdict !== 'ok') lines.push(`${task.id} review: ${cut(review.notes, SHORT_ANSWER)}`)
   }
 
   for (const task of batch.tasks) {
@@ -153,10 +167,6 @@ export function batchReport(batch: Batch, extras: ReportExtras = {}): string {
   const finished = batch.tasks.filter(t => t.status === 'done').length
   const total = batch.tasks.reduce((sum, t) => sum + t.cost, 0)
   const lines = [`# ${batch.title}`, `${finished}/${batch.tasks.length} done · $${total.toFixed(4)}`]
-  if (batch.tasks.some(t => t.dependsOn.length > 0)) {
-    lines.push('Dependent tasks started from HEAD, not from their dependency’s changes.')
-  }
-
   for (const task of batch.tasks) {
     lines.push(
       [
@@ -166,6 +176,7 @@ export function batchReport(batch: Batch, extras: ReportExtras = {}): string {
         extras.warnings?.[task.id] ? `warning: ${extras.warnings[task.id]}` : undefined,
         `cost: $${task.cost.toFixed(4)}`,
         task.verify ? `verify: ${task.verify}` : undefined,
+        extras.reviews?.[task.id] ? `review: ${extras.reviews[task.id].verdict}\n${extras.reviews[task.id].notes}` : undefined,
         task.sessionId ? `sessionId: ${task.sessionId}` : undefined,
         task.dir ? `dir: ${task.dir}` : undefined,
         task.branch ? `branch: ${task.branch}` : undefined,
