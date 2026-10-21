@@ -101,3 +101,11 @@ On mobile the panel is compact: it shows the worker, reasoning and presets, rece
 | `dailyBudget` | No new paid runs start once today's OpenCode spend reaches this. 0: no limit. | `0` |
 
 Change these with `/plugin configure opencode-go@opencode-go-mod` in a terminal session, or in the plugin settings in the desktop app.
+
+## Troubleshooting
+
+- **429 or 'Endpoint is unavailable'**: the endpoint is busy or rate-limited. Runs resume on their own; paid Go models may need Global regions enabled in the OpenCode workspace.
+- **A run prints nothing for `stallMinutes`**: it is killed and resumed.
+- **`/opencode selftest`**: checks the CLI, git, hang and rate-limit detection, notifications and the report folder.
+- **A finished batch task marked 'no changes ⚠'**: it edited nothing in its worktree.
+- **`opencode` missing or not signed in**: it must be on PATH and signed in with `opencode auth login`.
