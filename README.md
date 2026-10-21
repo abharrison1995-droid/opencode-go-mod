@@ -102,6 +102,14 @@ On mobile the panel is compact: it shows the worker, reasoning and presets, rece
 
 Change these with `/plugin configure opencode-go@opencode-go-mod` in a terminal session, or in the plugin settings in the desktop app.
 
+## Troubleshooting
+
+- **429 or 'Endpoint is unavailable'**: the endpoint is busy or rate-limited. Runs resume on their own; paid Go models may need Global regions enabled in the OpenCode workspace.
+- **A run prints nothing for `stallMinutes`**: it is killed and resumed.
+- **`/opencode selftest`**: checks the CLI, git, hang and rate-limit detection, notifications and the report folder.
+- **A finished batch task marked 'no changes ⚠'**: it edited nothing in its worktree.
+- **`opencode` missing or not signed in**: it must be on PATH and signed in with `opencode auth login`.
+
 ## Model health
 
 Each finished attempt is counted against its model as `ok`, `failed`, `rate-limited` or `hung`. Cancelled runs are ignored, and a run whose verify failed still counts as `ok` because the worker itself succeeded. The rating is the bad share: `failed` plus `rateLimited` plus `hung`, over all runs.
