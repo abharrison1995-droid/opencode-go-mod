@@ -30,6 +30,24 @@ export const makerOf = (id: string) => {
   return MAKERS.find(([re]) => re.test(bare))?.[1] ?? 'Other'
 }
 
+// Hex reads on light and dark themes alike; 'subtle' is a theme key, for makers with no colour.
+export const MAKER_COLORS: Record<string, string> = {
+  DeepSeek: '#4D7CFE',
+  'Z.ai': '#A06CF0',
+  'Moonshot AI': '#1FB5A8',
+  Qwen: '#F08A24',
+  MiniMax: '#E8559A',
+  Xiaomi: '#E0A800',
+  NVIDIA: '#76B900',
+  OpenAI: '#10A37F',
+  Anthropic: '#D97757',
+  Google: '#4285F4',
+  Meta: '#0866FF',
+  Other: 'subtle',
+}
+
+export const colorOf = (id: string) => MAKER_COLORS[makerOf(id)] ?? 'subtle'
+
 export async function findOpencode($: EngineInterface): Promise<string | undefined> {
   const which = await $.process.run(['sh', '-c', 'command -v opencode'])
   if (which.exitCode === 0 && which.stdout.trim() !== '') return which.stdout.trim()

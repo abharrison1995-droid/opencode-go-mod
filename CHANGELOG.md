@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.7.0]
+
+### Added
+
+- AGENTS section in the OpenCode panel, replacing RUNNING: a card for each running delegate job and running batch task, numbered in order. The header shows the model and reasoning in its maker's colour, the stage line shows what the run is doing (working, starting, retrying, verifying or reviewing), and ACTIVITY shows its latest action. Batch cards also show the batch title, task id and verify result.
+- Model names in the FREE and PAID lists and in PLAN task rows carry a dot in their maker's colour.
+- `colorOf` and `MAKER_COLORS` in `hooks/catalog.ts`: one hex colour per maker, readable on light and dark themes.
+
 ## [0.6.2]
 
 ### Fixed

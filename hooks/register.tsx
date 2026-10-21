@@ -1,10 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, ModelHealth, Preset, Preview, Spend, WorkerModel } from '../types'
+import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, ModelHealth, Phase, Preset, Preview, Spend, WorkerModel } from '../types'
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
-import { findOpencode, fullId, isFree, loadCatalog, price, readCache, worker, writeCache } from './catalog'
+import { colorOf, findOpencode, fullId, isFree, loadCatalog, price, readCache, worker, writeCache } from './catalog'
 import { chatTools, explainError, readKey, requestBody, sendWithRetry, toMessages } from './chat'
 import { cancel, track, tracked, untrack } from './control'
 import { attachedChars, budgetMessage, contextVerdict, contextWarning, dailySpent, formatReport, localDate, notify, overContext, resolveDir, runResilient } from './delegate'
@@ -236,6 +236,10 @@ export async function resumeTask($: EngineInterface, batchId: string, taskId: st
             await patch({ attempts: info.attempt, model: info.model })
             await showStatus($)
           },
+          onStage: async stage => {
+            await patch({ stage })
+            await showStatus($)
+          },
         },
         async run => {
           const last = run.tools.at(-1)
@@ -346,6 +350,35 @@ function batchId() {
 }
 
 const ICONS: Record<BatchTask['status'], string> = { pending: '○', running: '◐', done: '●', failed: '✕', skipped: '–', cancelled: '⊘' }
+
+// A card in the AGENTS section: a running delegate job, or a running task of a batch.
+type Agent = {
+  key: string
+  cancelKey: string
+  model: string
+  effort?: string
+  steps: number
+  last?: string
+  attempt?: number
+  stage?: Phase
+  batch?: { title: string; task: string; verify?: 'passed' | 'failed' }
+}
+
+type CardStage = 'starting' | 'working' | 'retrying' | Phase
+
+const STAGES: Record<CardStage, { icon: string; word: string; color: string }> = {
+  starting: { icon: '◐', word: 'starting', color: 'subtle' },
+  working: { icon: '●', word: 'working', color: 'suggestion' },
+  retrying: { icon: '↻', word: 'retrying', color: 'warning' },
+  verifying: { icon: '◆', word: 'verifying', color: 'permission' },
+  reviewing: { icon: '◇', word: 'reviewing', color: 'permission' },
+}
+
+function stageOf(a: Pick<Agent, 'steps' | 'attempt' | 'stage'>): CardStage {
+  if (a.stage !== undefined) return a.stage
+  if (a.attempt !== undefined && a.attempt > 1) return 'retrying'
+  return a.steps === 0 ? 'starting' : 'working'
+}
 
 type TaskAction = 'diff' | 'merge' | 'discard'
 
@@ -929,6 +962,10 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
             await setJob({ attempt: info.attempt, model: info.model })
             await showStatus($)
           },
+          onStage: async stage => {
+            await setJob({ stage })
+            await showStatus($)
+          },
         },
         async run => {
           const last = run.tools.at(-1)
@@ -1180,6 +1217,11 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
               await sync()
               await showStatus($)
             },
+            onStage: async stage => {
+              task.stage = stage
+              await sync()
+              await showStatus($)
+            },
           },
           async run => {
             task.steps = run.tools.length
@@ -1206,7 +1248,10 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
         }
         let reviewCost = 0
         if (input.review === true && !failed && prepared.branch !== undefined && batch.base !== undefined) {
+          task.stage = 'reviewing'
+          await sync()
           const review = await reviewTask($, { bin, dir: prepared.dir, base: batch.base, prompt: spec.prompt, model: reviewModel, retries, stallMs, fallback, signal })
+          task.stage = undefined
           extras.reviews ??= {}
           extras.reviews[task.id] = { verdict: review.verdict, notes: review.notes }
           reviewCost = review.cost
@@ -1362,6 +1407,24 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const recentModels = recentIds
       .map(id => cat.models.find(m => m.id === id))
       .filter((m): m is WorkerModel => m !== undefined)
+    const agents: Agent[] = [
+      ...running.map(j => ({ key: j.id, cancelKey: j.id, model: j.model, effort: j.effort, steps: j.steps, last: j.last, attempt: j.attempt, stage: j.stage })),
+      ...liveBatches.flatMap(b =>
+        b.tasks
+          .filter(t => t.status === 'running')
+          .map(t => ({
+            key: `${b.id}:${t.id}`,
+            cancelKey: `task:${b.id}:${t.id}`,
+            model: t.model,
+            effort: t.effort,
+            steps: t.steps,
+            last: t.last,
+            attempt: t.attempts,
+            stage: t.stage,
+            batch: { title: b.title, task: t.id, verify: t.verify },
+          })),
+      ),
+    ]
     const planBatches = [...liveBatches].sort((a, b) => b.startedAt - a.startedAt).slice(0, 3)
     const matchingPreset = PRESETS.find(p => p.model === model && p.effort === level)
     const modelHealth = healthData[model]
@@ -1392,6 +1455,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
           <Text bold={isPicked} color={isPicked ? 'suggestion' : undefined} dimColor={chatOnly}>
             {isPicked ? '● ' : '○ '}
             {dot(m.id)}
+            <Text color={colorOf(m.id)}>● </Text>
             {m.name}
           </Text>
           <Text dimColor> {chatOnly ? `${chip} · delegate only` : chip}</Text>
@@ -1529,25 +1593,46 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
           {matchingPreset !== undefined && <Text dimColor size="caption">{matchingPreset.note}</Text>}
         </Box>
 
-        {running.length > 0 && (
+        {agents.length > 0 && (
           <Box flexDirection="column">
-            <Text dimColor size="caption">RUNNING</Text>
-            {running.map(j => (
-              <Box key={j.id} flexDirection="row" gap={1}>
-                <Text>
-                  {j.model.split('/')[1]} <Text dimColor>· {j.effort ? `${j.effort} · ` : ''}{j.steps} steps{j.attempt !== undefined && j.attempt > 1 ? ` · try ${j.attempt}` : ''}{j.last ? ` · ${j.last.slice(0, 40)}` : ''}</Text>
-                </Text>
-                <Button
-                  key={`cancel:${j.id}`}
-                  plain
-                  label="Cancel"
-                  onPress={() => {
-                    const stopped = cancel(j.id)
-                    $.ui.toast(stopped ? `Cancelling ${j.id}.` : `${j.id} is not running.`)
-                  }}
-                />
-              </Box>
-            ))}
+            <Text dimColor size="caption">AGENTS</Text>
+            {agents.map((a, i) => {
+              const look = STAGES[stageOf(a)]
+              const name = a.batch?.task ?? a.key
+              return (
+                <Box key={a.key} flexDirection="column" borderStyle="round" paddingX={1}>
+                  <Box flexDirection="row" gap={1}>
+                    <Text bold color={colorOf(a.model)}>
+                      {`${i + 1} : ${(a.model.split('/')[1] ?? a.model).toUpperCase()} : ${a.effort ? a.effort.toUpperCase() : '—'}`}
+                    </Text>
+                    <Button
+                      key={`cancel:${a.key}`}
+                      plain
+                      label="Cancel"
+                      onPress={() => {
+                        const stopped = cancel(a.cancelKey)
+                        $.ui.toast(stopped ? `Cancelling ${name}.` : `${name} is not running.`)
+                      }}
+                    />
+                  </Box>
+                  {!isMobile && (
+                    <Text>
+                      <Text color={look.color}>{`${look.icon} ${look.word}`}</Text>
+                      <Text dimColor>
+                        {` · step ${a.steps}`}
+                        {a.attempt !== undefined && a.attempt > 1 ? ` · try ${a.attempt}` : ''}
+                        {a.batch !== undefined ? ` · ${a.batch.title} · ${a.batch.task}` : ''}
+                        {a.batch?.verify !== undefined ? ` · verify ${a.batch.verify === 'passed' ? '✓' : '✗'}` : ''}
+                      </Text>
+                    </Text>
+                  )}
+                  <Text>
+                    <Text dimColor>ACTIVITY </Text>
+                    {a.last !== undefined ? a.last.slice(0, 60) : <Text dimColor>—</Text>}
+                  </Text>
+                </Box>
+              )
+            })}
           </Box>
         )}
 
@@ -1581,9 +1666,8 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
                   {planOpen && b.tasks.map(t => {
                     const faded = t.status === 'pending' || t.status === 'skipped' || t.status === 'cancelled'
                     const tone = t.status === 'done' ? 'success' : t.status === 'failed' ? 'error' : undefined
+                    const title = t.title !== t.id ? t.title : ''
                     const detail = [
-                      t.title !== t.id ? t.title : '',
-                      t.model.split('/')[1] ?? t.model,
                       t.steps > 0 ? `${t.steps} steps` : '',
                       t.status === 'running' && t.last ? t.last.slice(0, 36) : '',
                       t.status === 'pending' && t.dependsOn.length > 0 ? `after ${t.dependsOn.join(', ')}` : '',
@@ -1602,7 +1686,9 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
                       <Box key={t.id} flexDirection="column">
                         <Text>
                           <Text color={tone} dimColor={faded}>{ICONS[t.status]}</Text> {t.id}
-                          {detail.length > 0 && <Text dimColor> · {detail.join(' · ')}</Text>}
+                          <Text dimColor>{title !== '' ? ` · ${title}` : ''} · </Text>
+                          <Text color={colorOf(t.model)} dimColor={faded}>● </Text>
+                          <Text dimColor>{t.model.split('/')[1] ?? t.model}{detail.map(d => ` · ${d}`).join('')}</Text>
                         </Text>
                         {(canDiff || canMerge || canDiscard || canResume) && (
                           <Box flexDirection="row" gap={1} flexWrap="wrap">

@@ -1,6 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 
-import type { WorkerModel } from '../types'
+import type { Phase, WorkerModel } from '../types'
 
 export type Run = {
   text: string
@@ -39,6 +39,8 @@ export type ResilientOptions = {
   verify?: string
   verifyRounds: number
   onAttempt?: (info: AttemptInfo) => void | Promise<void>
+  // Called with 'verifying' when the verify loop starts, and with undefined when it ends.
+  onStage?: (stage: Phase | undefined) => void | Promise<void>
 }
 
 export type ResilientResult = {
@@ -368,6 +370,7 @@ export async function runResilient(
   }
 
   if (reason === 'ok' && o.verify !== undefined && o.verify.trim() !== '') {
+    await o.onStage?.('verifying')
     let check = await runVerify($, o.verify, o.cwd)
     let rounds = 0
     const max = Math.max(0, o.verifyRounds)
@@ -377,6 +380,7 @@ export async function runResilient(
       if (reason !== 'ok') break
       check = await runVerify($, o.verify, o.cwd)
     }
+    await o.onStage?.(undefined)
     verify = { passed: check.passed, output: check.output, rounds }
     if (o.signal?.aborted === true) reason = 'cancelled'
     else if (!check.passed) reason = 'failed'

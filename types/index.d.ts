@@ -26,8 +26,11 @@ export type Catalog = {
   error?: string
 }
 
+/** A phase a running worker is in beyond working on its prompt; cleared when the phase ends. */
+export type Phase = 'verifying' | 'reviewing'
+
 /** A delegate call in flight, for the panel. */
-export type Job = { id: string; model: string; effort?: string; steps: number; last?: string; /** 1 on the first try, more after a resume or fallback */ attempt?: number }
+export type Job = { id: string; model: string; effort?: string; steps: number; last?: string; /** 1 on the first try, more after a resume or fallback */ attempt?: number; stage?: Phase }
 
 /** One task of a delegate_batch run. */
 export type BatchTask = {
@@ -54,6 +57,8 @@ export type BatchTask = {
   verify?: 'passed' | 'failed'
   /** whether auto-merge merged its branch into the batch's integration branch */
   merged?: boolean
+  /** the phase the task is in beyond working, while it runs */
+  stage?: Phase
 }
 
 /** A delegate_batch run, for the panel's PLAN section. */

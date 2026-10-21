@@ -79,6 +79,29 @@ test('desktop shows FREE and PAID without the all models toggle', async ($, on) 
   await ui.unmount()
 })
 
+test('AGENTS shows a running job as a card with its header and activity', async ($, on) => {
+  let release!: () => void
+  const gate = new Promise<void>(r => (release = r))
+  const spawn = async function* () {
+    yield { stream: 'stdout', text: RUN + '\n' }
+    await gate
+    return { value: { code: 0, signal: null } }
+  }
+  stand(on, new Map(), spawn)
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+
+  const call = $.tool.call({ tool: 'mcp__opencode-go__delegate', prompt: 'a', model: 'kimi-k3', effort: 'high' } as any)
+  const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
+  await until(ui, async () => (await ui.find({ type: 'Text', text: /ACTIVITY edit: src/ })) !== undefined)
+
+  expect(await ui.find({ type: 'Text', text: '1 : KIMI-K3 : HIGH' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /ACTIVITY edit: src\/a\.ts/ })).toBeDefined()
+
+  release()
+  await call
+  await ui.unmount()
+})
+
 test('PLAN draws a running batch and its task states', async ($, on) => {
   let release!: () => void
   const gate = new Promise<void>(r => (release = r))
@@ -141,14 +164,14 @@ test('PLAN folds and unfolds on its header', async ($, on) => {
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /2\/2 done/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /● x · kimi-k3/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /● x · ● kimi-k3/ })).toBeUndefined()
 
   const header = await ui.find({ type: 'Button', text: /Fold me/ })
   expect(header).toBeDefined()
   await ui.press({ key: header?.key ?? '' })
-  expect(await ui.find({ type: 'Text', text: /● x · kimi-k3/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /● x · ● kimi-k3/ })).toBeDefined()
   await ui.press({ key: header?.key ?? '' })
-  expect(await ui.find({ type: 'Text', text: /● x · kimi-k3/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /● x · ● kimi-k3/ })).toBeUndefined()
   await ui.unmount()
 })
 

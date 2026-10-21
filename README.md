@@ -60,10 +60,10 @@ The panel opens when a session starts and with `/opencode`. It has these section
 - **SPENT**: this chat's spend and run count, and the all-time total.
 - **REASONING**: the `low`, `medium`, `high`, `xhigh` and `max` levels.
 - **PRESETS**: the cheap, reliable and strong presets, with a note for the matching one.
-- **RUNNING**: live delegate jobs with their model, reasoning, steps and last action, each with Cancel.
+- **AGENTS**: a card for each running delegate job and running batch task, numbered in order. The header reads `<n> : <MODEL> : <REASONING>` in the model maker's colour. The stage line shows the stage (working, starting, retrying, verifying or reviewing), the step count, the try number above 1, and for batch tasks the batch title, task id and verify result. ACTIVITY shows the latest action. Each card has Cancel.
 - **PLAN**: the latest batches and their tasks, showing status, model, steps, attempts, verify result, merge state and branch. Tasks offer Diff, Merge, Discard and Resume where they apply. A diff opens in a preview.
 - **HISTORY**: recent finished batches with status, task count, cost and age, plus spend by model.
-- **FREE** and **PAID**: model lists grouped by maker. Free models show whether they are Go or Zen; paid models show input/output price per Mtok. Health dots mark good, shaky and bad models. A search field filters by model or maker, and Refresh models reloads the lists.
+- **FREE** and **PAID**: model lists grouped by maker. Free models show whether they are Go or Zen; paid models show input/output price per Mtok. Each model name has a dot in its maker's colour, and health dots mark good, shaky and bad models. A search field filters by model or maker, and Refresh models reloads the lists.
 
 On mobile the panel is compact: it shows the worker, reasoning and presets, recent models, and an All models toggle instead of the full lists.
 
