@@ -109,3 +109,15 @@ Change these with `/plugin configure opencode-go@opencode-go-mod` in a terminal 
 - **`/opencode selftest`**: checks the CLI, git, hang and rate-limit detection, notifications and the report folder.
 - **A finished batch task marked 'no changes ⚠'**: it edited nothing in its worktree.
 - **`opencode` missing or not signed in**: it must be on PATH and signed in with `opencode auth login`.
+
+## Model health
+
+Each finished attempt is counted against its model as `ok`, `failed`, `rate-limited` or `hung`. Cancelled runs are ignored, and a run whose verify failed still counts as `ok` because the worker itself succeeded. The rating is the bad share: `failed` plus `rateLimited` plus `hung`, over all runs.
+
+- **good**: under 20% bad.
+- **shaky**: 20% to 49% bad.
+- **bad**: 50% or more bad.
+
+A record whose last run is more than 6 hours old is treated leniently: under 50% bad is **good**, and 50% or more is **shaky**, never **bad**.
+
+Ratings show as the panel's health dots in the free and paid model lists, as `Unreliable right now` in the delegate tool description, and the `ladder` profile skips shaky and bad free models.
