@@ -1,0 +1,11 @@
+{
+  "name": "opencode-go-mod",
+  "owner": { "name": "abharrison1995-droid" },
+  "plugins": [
+    {
+      "name": "opencode-go",
+      "source": "./",
+      "description": "Delegate tasks to OpenCode Go models, picked in an OpenCode panel."
+    }
+  ]
+}

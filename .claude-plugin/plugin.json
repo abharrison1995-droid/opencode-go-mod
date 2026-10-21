@@ -1,0 +1,44 @@
+{
+  "name": "opencode-go",
+  "version": "0.5.0",
+  "description": "Lets Claude delegate tasks to OpenCode Go models, picked in an OpenCode panel with FREE and PAID sections and a reasoning level.",
+  "userConfig": {
+    "defaultModel": {
+      "type": "string",
+      "title": "Default OpenCode Go model",
+      "description": "Worker used until one is picked in the OpenCode panel (provider/model, or a bare id under opencode-go/).",
+      "default": "opencode-go/kimi-k3"
+    },
+    "orchestrate": {
+      "type": "boolean",
+      "title": "Encourage delegation",
+      "description": "Adds a short system prompt section telling Claude to hand routine work to OpenCode Go models.",
+      "default": true
+    },
+    "fallbackModel": {
+      "type": "string",
+      "title": "Fallback model",
+      "description": "Model a run switches to after the picked one keeps failing (429s, hangs). Empty: no fallback.",
+      "default": "opencode-go/deepseek-v4.1-flash"
+    },
+    "autoRetries": {
+      "type": "number",
+      "title": "Automatic resumes",
+      "description": "How many times a failed or hung opencode run is resumed before giving up (and trying the fallback model).",
+      "default": 3
+    },
+    "stallMinutes": {
+      "type": "number",
+      "title": "Stall limit (minutes)",
+      "description": "A run that prints nothing for this long is killed and resumed.",
+      "default": 10
+    },
+    "dailyBudget": {
+      "type": "number",
+      "title": "Daily budget (USD)",
+      "description": "No new paid runs start once today's OpenCode spend reaches this. 0: no limit.",
+      "default": 0
+    }
+  },
+  "types": "./types/index.d.ts"
+}
