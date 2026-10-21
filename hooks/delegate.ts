@@ -24,7 +24,7 @@ export type ResilientOptions = {
   model: string
   fallback?: string
   // When set, used instead of fallback: each rung in turn, with its own retries.
-  fallbacks?: { model: string; level?: string }[]
+  fallbacks?: { model: string; level?: string; retries?: number }[]
   level?: string
   prompt: string
   cwd: string | undefined
@@ -33,6 +33,7 @@ export type ResilientOptions = {
   files?: string[]
   sessionId?: string
   retries: number
+  firstRetries?: number
   stallMs: number
   signal?: AbortSignal
   verify?: string
@@ -284,13 +285,14 @@ export async function runResilient(
   const merged: Run = { text: '', tools: [], errors: [], cost: 0 }
   let sessionId = o.sessionId
   let model = o.model
+  let level = o.level
   let attempts = 0
   let reason: EndReason = 'failed'
   let verify: VerifyResult | undefined
   let end: RunEnd = { code: null, signal: null }
   let stderr = ''
 
-  const attempt = async (prompt: string, nextModel: string, nextSession: string | undefined, why: string) => {
+  const attempt = async (prompt: string, nextModel: string, nextSession: string | undefined, why: string, nextLevel: string | undefined) => {
     if (o.signal?.aborted === true) {
       reason = 'cancelled'
       return undefined
@@ -299,7 +301,7 @@ export async function runResilient(
     attempts++
     const argv = buildArgv(o.bin, {
       model: nextModel,
-      level: o.level,
+      level: nextLevel,
       sessionId: nextSession,
       autoApprove: o.autoApprove,
       readOnly: o.readOnly,
@@ -312,6 +314,7 @@ export async function runResilient(
     stderr = result.stderr
     if (result.run.sessionId !== undefined) sessionId = result.run.sessionId
     model = nextModel
+    level = nextLevel
     reason = result.reason
     return result
   }
@@ -328,7 +331,7 @@ export async function runResilient(
 
   // Resumes the session when there is one, else starts the task fresh. A fresh start has
   // nothing to check, so it goes again at once instead of paying the resume wait.
-  const retryRound = async (nextModel: string, tries: number, firstWhy: string) => {
+  const retryRound = async (nextModel: string, tries: number, firstWhy: string, nextLevel: string | undefined) => {
     let why = firstWhy
     for (let i = 0; i < tries; i++) {
       if (reason === 'ok' || reason === 'cancelled') return
@@ -337,19 +340,28 @@ export async function runResilient(
         return
       }
       const prompt = sessionId === undefined ? o.prompt : retryPrompt(reason)
-      await attempt(prompt, nextModel, sessionId, why)
+      await attempt(prompt, nextModel, sessionId, why, nextLevel)
       why = reason
     }
   }
 
-  await attempt(o.prompt, o.model, o.sessionId, 'start')
-  await retryRound(o.model, Math.max(0, o.retries), reason)
+  await attempt(o.prompt, o.model, o.sessionId, 'start', o.level)
+  await retryRound(o.model, Math.max(0, o.firstRetries ?? o.retries), reason, o.level)
 
-  const fallback = o.fallback ?? ''
-  if (reason !== 'ok' && reason !== 'cancelled' && fallback !== '' && fallback !== model) {
-    const prompt = sessionId === undefined ? o.prompt : retryPrompt(reason)
-    await attempt(prompt, fallback, sessionId, 'fallback')
-    await retryRound(fallback, Math.max(0, o.retries), reason)
+  if (reason !== 'ok' && reason !== 'cancelled' && o.fallbacks !== undefined && o.fallbacks.length > 0) {
+    for (const rung of o.fallbacks) {
+      if (reason === 'ok' || reason === 'cancelled') break
+      const prompt = sessionId === undefined ? o.prompt : retryPrompt(reason)
+      await attempt(prompt, rung.model, sessionId, 'fallback', rung.level)
+      await retryRound(rung.model, Math.max(0, rung.retries ?? o.retries), reason, rung.level)
+    }
+  } else {
+    const fallback = o.fallback ?? ''
+    if (reason !== 'ok' && reason !== 'cancelled' && fallback !== '' && fallback !== model) {
+      const prompt = sessionId === undefined ? o.prompt : retryPrompt(reason)
+      await attempt(prompt, fallback, sessionId, 'fallback', o.level)
+      await retryRound(fallback, Math.max(0, o.retries), reason, o.level)
+    }
   }
 
   if (reason === 'ok' && o.verify !== undefined && o.verify.trim() !== '') {
@@ -358,7 +370,7 @@ export async function runResilient(
     const max = Math.max(0, o.verifyRounds)
     while (!check.passed && rounds < max && sessionId !== undefined && o.signal?.aborted !== true) {
       rounds++
-      await attempt(verifyPrompt(o.verify, check.output), model, sessionId, 'verify')
+      await attempt(verifyPrompt(o.verify, check.output), model, sessionId, 'verify', level)
       if (reason !== 'ok') break
       check = await runVerify($, o.verify, o.cwd)
     }
