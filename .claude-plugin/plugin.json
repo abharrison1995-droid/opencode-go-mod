@@ -1,6 +1,6 @@
 {
   "name": "opencode-go",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "Lets Claude delegate tasks to OpenCode Go models, picked in an OpenCode panel with FREE and PAID sections and a reasoning level.",
   "author": {
     "name": "abharrison1995-droid",
@@ -48,6 +48,30 @@
       "title": "Review model",
       "description": "Model that reviews batch tasks when delegate_batch is called with review: true. A free model is enough.",
       "default": "opencode/deepseek-v4.1-flash-free"
+    },
+    "localModelsDir": {
+      "type": "string",
+      "title": "Local models folder",
+      "description": "Folder holding the kev checkout (kev/.venv) and the Laya venv (laya-env). Empty: ~/local-models.",
+      "default": ""
+    },
+    "kevModel": {
+      "type": "string",
+      "title": "Kev checkpoint",
+      "description": "Hub id or local folder Kev serves. kev-0.8b fits a 4 GB GPU; kev-4b wants about 16 GB.",
+      "default": "jaredpalmer/kev-0.8b"
+    },
+    "localDevice": {
+      "type": "string",
+      "title": "Kev device",
+      "description": "auto, cuda or cpu, for Kev.",
+      "default": "auto"
+    },
+    "layaDevice": {
+      "type": "string",
+      "title": "Laya device",
+      "description": "auto, cuda or cpu, for Laya. cpu (the default) leaves the GPU to Kev; Laya is fast enough there.",
+      "default": "cpu"
     }
   },
   "types": "./types/index.d.ts"

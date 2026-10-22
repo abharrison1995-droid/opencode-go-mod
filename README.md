@@ -45,6 +45,25 @@ In the desktop app, where `/plugin` does not run: click + next to the prompt box
 - The OpenCode panel and `/opencode` commands cover models, reasoning, presets, batches, history and cancel.
 - Chat mode answers turns through OpenCode Go's Anthropic-compatible endpoint.
 
+## Local decision models (Kev, Laya)
+
+`decide` asks a small model on your own machine typed questions about a piece of text: yes/no (`noul`), one-of (`choice`) or a scale (`score`). It returns calibrated probabilities, with nothing generated. It is free, private, and takes milliseconds once the model is loaded. Claude uses it for cheap, repeatable judgements such as triage, routing and classification.
+
+| Model | Port | What it is |
+| --- | --- | --- |
+| `kev` | 8009 | [Kev](https://github.com/jaredpalmer/kev), a LoRA on Qwen3.5. The default checkpoint is `jaredpalmer/kev-0.8b`, which fits a 4 GB GPU. |
+| `laya` | 8010 | [Laya](https://github.com/NandhaKishorM/laya), ModernBERT-based. English, plus 100+ languages. |
+
+Setup, once (Python 3.12 or 3.13 and [uv](https://docs.astral.sh/uv/)):
+
+```bash
+mkdir -p ~/local-models && cd ~/local-models
+git clone https://github.com/jaredpalmer/kev && (cd kev && uv sync --extra serve)
+uv venv --python 3.12 laya-env && uv pip install --python laya-env/bin/python "laya[serve]"
+```
+
+The first `decide` call starts that model's server on 127.0.0.1 and downloads its weights on first use. The server runs until you press Stop or the session ends. A server you started yourself on the same port is used as is.
+
 ## How Claude uses it
 
 Claude hands routine, well-specified work to `delegate` and keeps planning and review for itself. The worker sees nothing of the conversation, so the prompt must be self-contained, including files, constraints and what to report back. For independent work, or a larger job split into parts, Claude uses `delegate_batch`: workers run in parallel in separate worktrees, common context goes in `shared`, and `dependsOn` orders tasks. A task that would exceed 80% of its model's context is denied before it starts.
@@ -77,6 +96,7 @@ On mobile the panel is compact: it shows the worker, reasoning and presets, rece
 | `/opencode chat on\|off` | Sends this chat's turns through OpenCode Go, or back to Claude. |
 | `/opencode preset [name]` | Applies a preset (`cheap`, `reliable`, `strong`) or lists them. |
 | `/opencode models [free\|paid]` | Lists models with free status or price. |
+| `/opencode local [start\|stop] [kev\|laya]` | Shows, starts or stops the local decision models. |
 | `/opencode status` | Shows the worker, chat mode, running jobs and spend. |
 | `/opencode selftest` | Checks the CLI, git, hang detection, rate-limit detection, notifications and the report folder. |
 | `/opencode batches` | Lists this chat's batches and their task states. |
@@ -99,6 +119,10 @@ On mobile the panel is compact: it shows the worker, reasoning and presets, rece
 | `stallMinutes` | A run that prints nothing for this long is killed and resumed. | `10` |
 | `reviewModel` | Model that reviews batch tasks when `review` is on. | `opencode/deepseek-v4.1-flash-free` |
 | `dailyBudget` | No new paid runs start once today's OpenCode spend reaches this. 0: no limit. | `0` |
+| `localModelsDir` | Folder holding `kev/` (with its `.venv`) and `laya-env/`. Empty: `~/local-models`. | empty |
+| `kevModel` | Checkpoint Kev serves. Use `jaredpalmer/kev-4b` on a GPU with about 16 GB. | `jaredpalmer/kev-0.8b` |
+| `localDevice` | `auto`, `cuda` or `cpu`, for Kev. | `auto` |
+| `layaDevice` | `auto`, `cuda` or `cpu`, for Laya. CPU leaves the GPU to Kev; on an 8 GB card the two don't fit together. | `cpu` |
 
 Change these with `/plugin configure opencode-go@opencode-go-mod` in a terminal session, or in the plugin settings in the desktop app.
 

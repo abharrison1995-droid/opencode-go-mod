@@ -4,6 +4,15 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.0]
+
+### Added
+
+- `decide` tool: asks Kev or Laya, small decision models running on this machine, typed questions (`noul`, `choice`, `score`) about a text and returns calibrated probabilities. `model: "both"` compares them side by side. The first call starts the model's server, and the server is stopped when the session ends.
+- LOCAL section in the OpenCode panel: each local model's status, call count and latency, with Start and Stop.
+- `/opencode local [status|start|stop] [kev|laya]`.
+- Options `localModelsDir`, `kevModel`, `localDevice` and `layaDevice`. Laya runs on the CPU by default, so Kev has the GPU.
+
 ## [0.7.0]
 
 ### Added

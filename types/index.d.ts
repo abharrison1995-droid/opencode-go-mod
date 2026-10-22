@@ -120,6 +120,12 @@ export type Preview = { title: string; text: string }
 /** What OpenCode runs cost, as opencode reports it (USD). */
 export type Spend = { session: number; runs: number }
 
+/** A local decision model the mod can serve. */
+export type LocalName = 'kev' | 'laya'
+
+/** A local model server, as the panel shows it. */
+export type LocalServer = { status: 'off' | 'starting' | 'ready' | 'error'; error?: string; startedAt?: number; calls?: number; lastMs?: number }
+
 declare module 'claude-code' {
   interface PluginState {
     'opencode-go': {
@@ -151,6 +157,8 @@ declare module 'claude-code' {
       spendByModel: Record<string, number>
       /** what the panel previews, or null */
       preview: Preview | null
+      /** Kev and Laya servers on this machine */
+      local: Record<string, LocalServer>
     }
   }
 }

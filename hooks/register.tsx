@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, ModelHealth, Phase, Preset, Preview, Spend, WorkerModel } from '../types'
+import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, LocalName, LocalServer, ModelHealth, Phase, Preset, Preview, Spend, WorkerModel } from '../types'
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
 import { colorOf, findOpencode, fullId, isFree, loadCatalog, price, readCache, worker, writeCache } from './catalog'
@@ -11,6 +11,8 @@ import { attachedChars, budgetMessage, contextVerdict, contextWarning, dailySpen
 import { branchDiff, discardTask, mergeBranch, worktreeFolder } from './git'
 import { recordRun } from './health'
 import { ladder } from './ladder'
+import { askLocal, checkQuestions, formatAnswers, LOCAL, localNamed, ownsLocal, ping, startLocal, stopLocal } from './local'
+import type { LocalOptions, LocalSpec } from './local'
 import type { Rung } from './ladder'
 import { PRESETS, presetNamed, rate } from './presets'
 import { batchReport, batchShortReport, changedFiles, delegateShort, writeReport } from './report'
@@ -35,9 +37,11 @@ const health = atom({ plugin: 'opencode-go', key: 'health' } as const, {} as Rec
 const history = atom({ plugin: 'opencode-go', key: 'history' } as const, [] as BatchSummary[])
 const spendByModel = atom({ plugin: 'opencode-go', key: 'spendByModel' } as const, {} as Record<string, number>)
 const preview = atom({ plugin: 'opencode-go', key: 'preview' } as const, null as Preview | null)
+const local = atom({ plugin: 'opencode-go', key: 'local' } as const, {} as Record<string, LocalServer>)
 
 const TOOL = 'mcp__opencode-go__delegate'
 const BATCH_TOOL = 'mcp__opencode-go__delegate_batch'
+const DECIDE_TOOL = 'mcp__opencode-go__decide'
 const PANE = 'opencode'
 const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
 
@@ -282,6 +286,56 @@ export async function resumeTask($: EngineInterface, batchId: string, taskId: st
 
 async function current($: EngineInterface, defaultModel: string) {
   return (await read($, picked)) || defaultModel
+}
+
+async function registerDecide($: EngineInterface) {
+  await $.tool.register({
+    name: 'decide',
+    description: `Ask a small decision model running on this machine (free, private, no network) typed questions about a piece of text, and get calibrated probabilities back in well under a second once loaded. Nothing is generated, so nothing is hallucinated: each answer is a probability over the options you give.
+
+Models: kev (Kev, a Qwen3.5 decision model; the more accurate on unfamiliar questions) and laya (Laya, a ModernBERT decision model; faster, English plus 100+ languages, 512-token English limit). model "both" asks both and shows them side by side. The first call starts the server, which can take a minute or more (longer on the very first run, which downloads weights).
+
+Question types, keyed by a name you choose:
+- noul: yes/no. {"type":"noul","instructions":"Is this about billing?"} → probability of yes
+- choice: one of several. {"type":"choice","instructions":"Which team?","criteria":{"billing":"charges, refunds","shipping":"delivery"}}
+- score: an ordered scale. {"type":"score","instructions":"How urgent?","criteria":["low","normal","high"]}
+
+Use it for cheap, repeatable judgements: triage, routing, classifying files or messages, flagging risk, checking a rule against a document. Questions cannot read each other. Treat confidence below about 0.6 as unsure and decide those yourself. Accuracy is well below yours, so don't use it for anything that needs reasoning.`,
+    isDeferred: false,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        model: { type: 'string', enum: ['kev', 'laya', 'both'], description: 'Which local model answers. Default kev.' },
+        state: { description: 'The text (or a JSON object) the questions are about.' },
+        questions: { type: 'object', description: 'Name → {type: noul|choice|score, instructions, criteria?}.' },
+        raw: { type: 'boolean', description: 'Return the full JSON answers, with every probability, instead of one line per question.' },
+      },
+      required: ['state', 'questions'],
+    },
+  })
+}
+
+async function homeDir($: EngineInterface) {
+  const { stdout } = await $.process.run(['printenv', 'HOME'])
+  return stdout.trim()
+}
+
+async function setLocal($: EngineInterface, name: LocalName, patch: Partial<LocalServer>) {
+  await update($, local, all => ({ ...all, [name]: { ...(all[name] ?? { status: 'off' }), ...patch } }))
+}
+
+async function bringUp($: EngineInterface, spec: LocalSpec, opts: LocalOptions) {
+  return startLocal($, spec, opts, patch => setLocal($, spec.name, patch))
+}
+
+async function refreshLocal($: EngineInterface) {
+  for (const spec of LOCAL) {
+    const now = (await read($, local))[spec.name]?.status
+    if (now === 'starting') continue
+    const up = await ping($, spec)
+    if (up && now !== 'ready') await setLocal($, spec.name, { status: 'ready', error: undefined })
+    if (!up && now === 'ready') await setLocal($, spec.name, { status: 'off' })
+  }
 }
 
 async function pick($: EngineInterface, id: string) {
@@ -566,6 +620,11 @@ async function autoMerge(
 
 export const register: Register = (on, options) => {
   const defaultModel = fullId(String(options.defaultModel ?? 'opencode-go/kimi-k3'))
+  let localDir = String(options.localModelsDir ?? '').trim()
+  const localOpts = async ($: EngineInterface): Promise<LocalOptions> => {
+    if (localDir === '') localDir = `${await homeDir($)}/local-models`
+    return { dir: localDir, kevRun: String(options.kevModel ?? '') || 'jaredpalmer/kev-0.8b', device: String(options.localDevice ?? '') || 'auto', layaDevice: String(options.layaDevice ?? '') || 'cpu' }
+  }
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -588,6 +647,8 @@ export const register: Register = (on, options) => {
     }
 
     await registerTool($, [])
+    await registerDecide($)
+    void refreshLocal($)
     await $.command.register({ name: 'opencode', description: 'OpenCode panel and settings: /opencode [model <name> | effort <level> | chat on|off | models | status | help]' })
     void refresh($)
     void $.ui.open({ id: PANE, title: 'OpenCode' })
@@ -615,6 +676,7 @@ export const register: Register = (on, options) => {
       '  /opencode resume <batch> <task> continue a failed or cancelled task',
       '  /opencode history              recent batches and spend by model',
       '  /opencode status               what is running and what it cost',
+      '  /opencode local [start|stop] [kev|laya]  local decision models',
       '  /opencode selftest             check hang detection, rate limits and notifications here',
       '  /opencode help                 this list',
     ].join('\n')
@@ -684,6 +746,29 @@ export const register: Register = (on, options) => {
       if (rest !== 'paid') sections.push(['FREE', free])
       if (rest !== 'free') sections.push(['PAID', paid])
       return { text: sections.map(([title, list]) => `${title}\n${list.length ? list.map(line).join('\n') : '(none)'}`).join('\n\n') }
+    }
+
+    if (sub === 'local') {
+      const [verb = 'status', which = 'all'] = rest.toLowerCase().split(/\s+/).filter(Boolean)
+      const specs = which === 'all' ? LOCAL : [localNamed(which)].filter((x): x is LocalSpec => x !== undefined)
+      if (specs.length === 0) return { text: `No local model "${which}". Try kev or laya.` }
+      if (verb === 'start') {
+        const opts = await localOpts($)
+        for (const spec of specs) void bringUp($, spec, opts)
+        return { text: `Starting ${specs.map(x => x.label).join(' and ')}; the panel shows when ${specs.length > 1 ? 'they are' : 'it is'} ready.` }
+      }
+      if (verb === 'stop') {
+        const lines: string[] = []
+        for (const spec of specs) {
+          const stopped = await stopLocal(spec.name)
+          if (stopped) await setLocal($, spec.name, { status: 'off', error: undefined })
+          lines.push(stopped ? `${spec.label} stopped.` : `${spec.label} was not started by this session.`)
+        }
+        return { text: lines.join('\n') }
+      }
+      await refreshLocal($)
+      const all = await read($, local)
+      return { text: specs.map(x => `${x.label} :${x.port} · ${all[x.name]?.status ?? 'off'}${all[x.name]?.error ? ` · ${all[x.name]?.error}` : ''}`).join('\n') }
     }
 
     if (sub === 'status') {
@@ -869,6 +954,31 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     yield { kind: 'stop', stopReason, usage }
     return { turnId: e.turnId, index: e.index, answer, toolUses, stopReason, usage }
   })
+
+  on('tool.call', { tool: DECIDE_TOOL }, async ($, e) => {
+    const input = e as unknown as { model?: string; state?: unknown; questions?: unknown; raw?: boolean }
+    if (input.state === undefined || input.state === '') return { deny: 'decide needs a state: the text the questions are about.' }
+    const bad = checkQuestions(input.questions)
+    if (bad) return { deny: `decide: ${bad}` }
+    const specs = input.model === 'both' ? LOCAL : LOCAL.filter(x => x.name === (localNamed(input.model ?? '')?.name ?? 'kev'))
+    const opts = await localOpts($)
+    const parts = await Promise.all(
+      specs.map(async spec => {
+        const up = await bringUp($, spec, opts)
+        if (!up.ok) return `${spec.label}: could not start. ${up.error}\nIs it installed in ${opts.dir}? (/opencode local status)`
+        const t0 = Date.now()
+        const got = await askLocal($, spec, input.state, input.questions)
+        if ('error' in got) return `${spec.label}: ${got.error}`
+        const ms = got.latencyMs ?? Date.now() - t0
+        await setLocal($, spec.name, { status: 'ready', calls: ((await read($, local))[spec.name]?.calls ?? 0) + 1, lastMs: ms })
+        const body = input.raw ? JSON.stringify(got.answers, null, 2) : formatAnswers(got.answers)
+        return `${spec.label} (${Math.round(ms)} ms)\n${body}`
+      }),
+    )
+    return { result: parts.join('\n\n') }
+  }).catch(($, e, next) => ({
+    deny: 'decide failed unexpectedly. Try /opencode local status.',
+  }))
 
   on('tool.call', { tool: TOOL }, async ($, e, next) => {
     const input = e as unknown as {
@@ -1401,6 +1511,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const historyList = await read($, history)
     const byModel = await read($, spendByModel)
     const shownPreview = await read($, preview)
+    const localNow = await read($, local)
     const selected = cat.models.find(m => m.id === model)
     const { free, paid } = worker(cat.models)
     const isMobile = e.surface === 'mobile'
@@ -1591,6 +1702,29 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
             ))}
           </Box>
           {matchingPreset !== undefined && <Text dimColor size="caption">{matchingPreset.note}</Text>}
+        </Box>
+
+        <Box flexDirection="column">
+          <Text dimColor size="caption">LOCAL</Text>
+          {LOCAL.map(spec => {
+            const srv = localNow[spec.name] ?? { status: 'off' as const }
+            const color = srv.status === 'ready' ? 'success' : srv.status === 'starting' ? 'warning' : srv.status === 'error' ? 'error' : undefined
+            const busy = srv.status === 'starting' || srv.status === 'ready'
+            return (
+              <Box key={`local:${spec.name}`} flexDirection="column">
+                <Box flexDirection="row" gap={1}>
+                  <Text color={color}>● </Text>
+                  <Text bold>{spec.label}</Text>
+                  <Text dimColor>{srv.status}{srv.calls ? ` · ${srv.calls} calls · ${Math.round(srv.lastMs ?? 0)} ms` : ''}</Text>
+                  {!busy && <Button key={`local-start:${spec.name}`} plain label="Start" onPress={() => void localOpts($).then(o => bringUp($, spec, o))} />}
+                  {busy && ownsLocal(spec.name) && (
+                    <Button key={`local-stop:${spec.name}`} plain label="Stop" onPress={() => void stopLocal(spec.name).then(() => setLocal($, spec.name, { status: 'off', error: undefined }))} />
+                  )}
+                </Box>
+                {srv.error !== undefined ? <Text color="error" size="caption">{srv.error}</Text> : <Text dimColor size="caption">{spec.note}</Text>}
+              </Box>
+            )
+          })}
         </Box>
 
         {agents.length > 0 && (
