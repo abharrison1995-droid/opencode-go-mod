@@ -62,6 +62,10 @@ git clone https://github.com/jaredpalmer/kev && (cd kev && uv sync --extra serve
 uv venv --python 3.12 laya-env && uv pip install --python laya-env/bin/python "laya[serve]"
 ```
 
+To run a model bigger than your GPU, set `kevGpuGb` to what the card can spare (about 4 on an 8 GB card with a desktop on it), and Kev splits itself between the GPU and RAM.
+
+Models take turns: servers start one at a time, and `model: "both"` asks Kev and then Laya, never the two at once.
+
 The first `decide` call starts that model's server on 127.0.0.1 and downloads its weights on first use. The server runs until you press Stop or the session ends. A server you started yourself on the same port is used as is.
 
 ## How Claude uses it
@@ -120,7 +124,8 @@ On mobile the panel is compact: it shows the worker, reasoning and presets, rece
 | `reviewModel` | Model that reviews batch tasks when `review` is on. | `opencode/deepseek-v4.1-flash-free` |
 | `dailyBudget` | No new paid runs start once today's OpenCode spend reaches this. 0: no limit. | `0` |
 | `localModelsDir` | Folder holding `kev/` (with its `.venv`) and `laya-env/`. Empty: `~/local-models`. | empty |
-| `kevModel` | Checkpoint Kev serves. Use `jaredpalmer/kev-4b` on a GPU with about 16 GB. | `jaredpalmer/kev-0.8b` |
+| `kevModel` | Checkpoint Kev serves. `jaredpalmer/kev-4b` is more accurate: give it a GPU with about 16 GB, or split it with `kevGpuGb`. | `jaredpalmer/kev-0.8b` |
+| `kevGpuGb` | Above 0, Kev's first layers fill this many GiB of the GPU and the rest run from system RAM (through `scripts/kev_split.py` and Hugging Face accelerate). This lets a model larger than the card run, more slowly. 0: Kev runs whole on one device. | `0` |
 | `localDevice` | `auto`, `cuda` or `cpu`, for Kev. | `auto` |
 | `layaDevice` | `auto`, `cuda` or `cpu`, for Laya. CPU leaves the GPU to Kev; on an 8 GB card the two don't fit together. | `cpu` |
 

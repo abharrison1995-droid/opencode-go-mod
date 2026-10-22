@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { checkQuestions, formatAnswers, localNamed } from './local'
+import type { LocalOptions } from './local'
 
 test('checkQuestions accepts the three question types', async () => {
   expect(
@@ -36,4 +37,18 @@ test('localNamed ignores case', async () => {
   expect(localNamed('Kev')?.port).toBe(8009)
   expect(localNamed('LAYA')?.port).toBe(8010)
   expect(localNamed('other')).toBe(undefined)
+})
+
+const opts = (kevGpuGb: number): LocalOptions => ({ dir: '/m', kevRun: 'jaredpalmer/kev-4b', device: 'auto', layaDevice: 'cpu', kevGpuGb, root: '/mod' })
+
+test('Kev runs plain kev.serve with no GPU budget', async () => {
+  const kev = localNamed('kev')!
+  expect(kev.argv('/m', opts(0))).toEqual(['/m/kev/.venv/bin/python', '-m', 'kev.serve', '--run', 'jaredpalmer/kev-4b', '--port', '8009', '--host', '127.0.0.1', '--device', 'auto'])
+  expect(kev.env(opts(0))).toEqual({})
+})
+
+test('Kev splits across GPU and RAM through kev_split.py with a budget', async () => {
+  const kev = localNamed('kev')!
+  expect(kev.argv('/m', opts(4))).toEqual(['/m/kev/.venv/bin/python', '/mod/scripts/kev_split.py', '--run', 'jaredpalmer/kev-4b', '--port', '8009', '--host', '127.0.0.1', '--device', 'cuda'])
+  expect(kev.env(opts(4))).toEqual({ KEV_GPU_GB: '4' })
 })

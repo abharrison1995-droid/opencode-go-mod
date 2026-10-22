@@ -72,6 +72,12 @@
       "title": "Laya device",
       "description": "auto, cuda or cpu, for Laya. cpu (the default) leaves the GPU to Kev; Laya is fast enough there.",
       "default": "cpu"
+    },
+    "kevGpuGb": {
+      "type": "number",
+      "title": "Kev GPU budget (GiB)",
+      "description": "Above 0: Kev's layers fill this much of the GPU and the rest run from system RAM, so a model larger than the card still runs (slower). 0: Kev runs whole on one device.",
+      "default": 0
     }
   },
   "types": "./types/index.d.ts"

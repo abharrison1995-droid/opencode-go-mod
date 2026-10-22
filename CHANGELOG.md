@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - LOCAL section in the OpenCode panel: each local model's status, call count and latency, with Start and Stop.
 - `/opencode local [status|start|stop] [kev|laya]`.
 - Options `localModelsDir`, `kevModel`, `localDevice` and `layaDevice`. Laya runs on the CPU by default, so Kev has the GPU.
+- `kevGpuGb` splits Kev between the GPU and system RAM (`scripts/kev_split.py`, using accelerate), so Kev-4B runs on an 8 GB card.
+- Local models take turns: servers start one at a time, and `model: "both"` asks Kev and then Laya instead of both at once.
 
 ## [0.7.0]
 

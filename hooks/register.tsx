@@ -293,7 +293,7 @@ async function registerDecide($: EngineInterface) {
     name: 'decide',
     description: `Ask a small decision model running on this machine (free, private, no network) typed questions about a piece of text, and get calibrated probabilities back in well under a second once loaded. Nothing is generated, so nothing is hallucinated: each answer is a probability over the options you give.
 
-Models: kev (Kev, a Qwen3.5 decision model; the more accurate on unfamiliar questions) and laya (Laya, a ModernBERT decision model; faster, English plus 100+ languages, 512-token English limit). model "both" asks both and shows them side by side. The first call starts the server, which can take a minute or more (longer on the very first run, which downloads weights).
+Models: kev (Kev, a Qwen3.5 decision model; the more accurate on unfamiliar questions) and laya (Laya, a ModernBERT decision model; faster, English plus 100+ languages, 512-token English limit). model "both" asks Kev, then Laya (one after the other), and shows them side by side. The first call starts the server, which can take a minute or more (longer on the very first run, which downloads weights).
 
 Question types, keyed by a name you choose:
 - noul: yes/no. {"type":"noul","instructions":"Is this about billing?"} → probability of yes
@@ -336,6 +336,17 @@ async function refreshLocal($: EngineInterface) {
     if (up && now !== 'ready') await setLocal($, spec.name, { status: 'ready', error: undefined })
     if (!up && now === 'ready') await setLocal($, spec.name, { status: 'off' })
   }
+}
+
+async function askOne($: EngineInterface, spec: LocalSpec, opts: LocalOptions, state: unknown, questions: unknown, raw: boolean) {
+  const up = await bringUp($, spec, opts)
+  if (!up.ok) return `${spec.label}: could not start. ${up.error}\nIs it installed in ${opts.dir}? (/opencode local status)`
+  const t0 = Date.now()
+  const got = await askLocal($, spec, state, questions)
+  if ('error' in got) return `${spec.label}: ${got.error}`
+  const ms = got.latencyMs ?? Date.now() - t0
+  await setLocal($, spec.name, { status: 'ready', calls: ((await read($, local))[spec.name]?.calls ?? 0) + 1, lastMs: ms })
+  return `${spec.label} (${Math.round(ms)} ms)\n${raw ? JSON.stringify(got.answers, null, 2) : formatAnswers(got.answers)}`
 }
 
 async function pick($: EngineInterface, id: string) {
@@ -623,7 +634,7 @@ export const register: Register = (on, options) => {
   let localDir = String(options.localModelsDir ?? '').trim()
   const localOpts = async ($: EngineInterface): Promise<LocalOptions> => {
     if (localDir === '') localDir = `${await homeDir($)}/local-models`
-    return { dir: localDir, kevRun: String(options.kevModel ?? '') || 'jaredpalmer/kev-0.8b', device: String(options.localDevice ?? '') || 'auto', layaDevice: String(options.layaDevice ?? '') || 'cpu' }
+    return { dir: localDir, kevRun: String(options.kevModel ?? '') || 'jaredpalmer/kev-0.8b', device: String(options.localDevice ?? '') || 'auto', layaDevice: String(options.layaDevice ?? '') || 'cpu', kevGpuGb: Number(options.kevGpuGb ?? 0) || 0, root: $.plugin.root }
   }
 
   on('session.start', async ($, e, next) => {
@@ -962,19 +973,9 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     if (bad) return { deny: `decide: ${bad}` }
     const specs = input.model === 'both' ? LOCAL : LOCAL.filter(x => x.name === (localNamed(input.model ?? '')?.name ?? 'kev'))
     const opts = await localOpts($)
-    const parts = await Promise.all(
-      specs.map(async spec => {
-        const up = await bringUp($, spec, opts)
-        if (!up.ok) return `${spec.label}: could not start. ${up.error}\nIs it installed in ${opts.dir}? (/opencode local status)`
-        const t0 = Date.now()
-        const got = await askLocal($, spec, input.state, input.questions)
-        if ('error' in got) return `${spec.label}: ${got.error}`
-        const ms = got.latencyMs ?? Date.now() - t0
-        await setLocal($, spec.name, { status: 'ready', calls: ((await read($, local))[spec.name]?.calls ?? 0) + 1, lastMs: ms })
-        const body = input.raw ? JSON.stringify(got.answers, null, 2) : formatAnswers(got.answers)
-        return `${spec.label} (${Math.round(ms)} ms)\n${body}`
-      }),
-    )
+    // One model after the other, never both at once: they share the machine's GPU and RAM.
+    const parts: string[] = []
+    for (const spec of specs) parts.push(await askOne($, spec, opts, input.state, input.questions, input.raw === true))
     return { result: parts.join('\n\n') }
   }).catch(($, e, next) => ({
     deny: 'decide failed unexpectedly. Try /opencode local status.',

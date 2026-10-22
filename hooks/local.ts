@@ -16,7 +16,7 @@ export type LocalSpec = {
   note: string
 }
 
-export type LocalOptions = { dir: string; kevRun: string; device: string; layaDevice: string }
+export type LocalOptions = { dir: string; kevRun: string; device: string; layaDevice: string; /** GiB of GPU Kev may take, the rest in RAM; 0: all on one device */ kevGpuGb: number; /** this mod's folder, for scripts/kev_split.py */ root: string }
 
 export const LOCAL: LocalSpec[] = [
   {
@@ -24,8 +24,12 @@ export const LOCAL: LocalSpec[] = [
     label: 'Kev',
     port: 8009,
     folder: 'kev',
-    argv: (dir, o) => [`${dir}/kev/.venv/bin/python`, '-m', 'kev.serve', '--run', o.kevRun, '--port', '8009', '--host', '127.0.0.1', '--device', o.device],
-    env: () => ({}),
+    argv: (dir, o) => [
+      `${dir}/kev/.venv/bin/python`,
+      ...(o.kevGpuGb > 0 ? [`${o.root}/scripts/kev_split.py`] : ['-m', 'kev.serve']),
+      ...['--run', o.kevRun, '--port', '8009', '--host', '127.0.0.1', '--device', o.kevGpuGb > 0 ? 'cuda' : o.device],
+    ],
+    env: (o): Record<string, string> => (o.kevGpuGb > 0 ? { KEV_GPU_GB: String(o.kevGpuGb) } : {}),
     ready: '/v1/models',
     note: 'Qwen3.5 + LoRA decision model (Jared Palmer)',
   },
@@ -63,6 +67,31 @@ export async function startLocal(
   opts: LocalOptions,
   set: (state: Partial<LocalServer>) => Promise<void>,
   waitMs = 600_000,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (await ping($, s)) {
+    await set({ status: 'ready', error: undefined })
+    return { ok: true }
+  }
+  // One server loads at a time: two loading together spike RAM and GPU memory at once.
+  const turn = starting
+  let done = () => {}
+  starting = new Promise<void>(r => (done = r))
+  try {
+    await turn
+    return await launch($, s, opts, set, waitMs)
+  } finally {
+    done()
+  }
+}
+
+let starting: Promise<void> = Promise.resolve()
+
+async function launch(
+  $: EngineInterface,
+  s: LocalSpec,
+  opts: LocalOptions,
+  set: (state: Partial<LocalServer>) => Promise<void>,
+  waitMs: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (await ping($, s)) {
     await set({ status: 'ready', error: undefined })
