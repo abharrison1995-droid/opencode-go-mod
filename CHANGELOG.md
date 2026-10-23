@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Local models take turns: servers start one at a time, and `model: "both"` asks Kev and then Laya instead of both at once.
+- The panel's drawing moved from register.tsx to `hooks/panel.tsx`; register.tsx now reads the state and passes in callbacks. Nothing it shows or does changed.
 
 ### Fixed
 

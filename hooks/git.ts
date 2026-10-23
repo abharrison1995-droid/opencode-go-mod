@@ -1,8 +1,20 @@
 import type { EngineInterface } from 'claude-code'
 
+import type { Batch, BatchTask } from '../types'
+
 export type GitResult = { ok: boolean; text: string }
 
+export type TaskAction = 'diff' | 'merge' | 'discard'
+
 const CAP = 60_000
+
+// Batches made before top/base were recorded still know their worktree's folder; the
+// folder is `<top>-opencode/<batch>-<task>`, so its head is the repo.
+export function repoOf(batch: Batch, task: BatchTask) {
+  if (batch.top !== undefined) return { top: batch.top, base: batch.base }
+  const at = task.dir === undefined ? -1 : task.dir.indexOf('-opencode/')
+  return at > 0 ? { top: task.dir?.slice(0, at), base: batch.base } : { top: batch.top, base: batch.base }
+}
 
 async function git($: EngineInterface, argv: string[]) {
   const out = await $.process

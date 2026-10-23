@@ -8,6 +8,8 @@ export const PRESETS: Preset[] = [
 
 export const presetNamed = (name: string) => PRESETS.find(p => p.name === name.toLowerCase())
 
+export const EFFORTS: Effort[] = ['low', 'medium', 'high', 'xhigh', 'max']
+
 export const isEffort = (s: unknown): s is Effort => s === 'low' || s === 'medium' || s === 'high' || s === 'xhigh' || s === 'max'
 
 // The panel's health dot. Recent rate limits and hangs count against a model more than old ones.

@@ -13,7 +13,8 @@ opencode-go is a Claude Code mod (a function-hooks plugin). It lets Claude deleg
   - prompt.compose
   - turn.step (chat mode)
   - tool.call for `delegate`, `delegate_batch` and `decide`
-  - ui.render (the OpenCode panel)
+  - ui.render (the OpenCode panel), which reads state and hands it to `panel`
+- `hooks/panel.tsx`: `panel` draws the OpenCode panel from a plain `PanelView` and a `PanelActions` object of callbacks, which register.tsx builds around `$`.
 - `hooks/delegate.ts`:
   - `runOpencode` is the spawn loop, with a stall watchdog and end reasons.
   - `runResilient` handles resumes, fallback models and the verify loop.
@@ -22,7 +23,7 @@ opencode-go is a Claude Code mod (a function-hooks plugin). It lets Claude deleg
   - `prepareDir` makes a worktree or copy for each task.
   - `commitTask` commits a task's work; `runBatch` is the scheduler.
 - `hooks/report.ts`: short and full reports, and the merge section.
-- `hooks/git.ts`: diff, merge and discard for task branches.
+- `hooks/git.ts`: diff, merge and discard for task branches, and `repoOf`.
 - `hooks/health.ts`: `recordRun`, the per-model health counters.
 - `hooks/presets.ts`: the cheap, reliable and strong presets, and `rate()`.
 - `hooks/ladder.ts`: the `ladder` profile, models from cheapest to strongest.
