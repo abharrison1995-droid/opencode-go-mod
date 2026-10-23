@@ -126,7 +126,74 @@ export type LocalName = 'kev' | 'laya'
 /** A local model server, as the panel shows it. */
 export type LocalServer = { status: 'off' | 'starting' | 'ready' | 'error'; error?: string; startedAt?: number; calls?: number; lastMs?: number }
 
+/** delegate's arguments, as its inputSchema in register.tsx describes them. */
+export type DelegateInput = {
+  prompt: string
+  model?: string
+  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder'
+  effort?: Effort
+  dir?: string
+  sessionId?: string
+  autoApprove?: boolean
+  readOnly?: boolean
+  files?: string[]
+  verify?: string
+  verifyRounds?: number
+  report?: 'short' | 'full'
+}
+
+/** One task of delegate_batch. */
+export type DelegateBatchTask = {
+  id: string
+  prompt: string
+  title?: string
+  model?: string
+  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder'
+  effort?: Effort
+  readOnly?: boolean
+  dependsOn?: string[]
+  files?: string[]
+  verify?: string
+  verifyRounds?: number
+}
+
+/** delegate_batch's arguments. */
+export type DelegateBatchInput = {
+  title: string
+  tasks: DelegateBatchTask[]
+  shared?: string
+  files?: string[]
+  verify?: string
+  verifyRounds?: number
+  maxCost?: number
+  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder'
+  autoMerge?: boolean
+  autoResolve?: boolean
+  review?: boolean
+  report?: 'short' | 'full'
+  maxParallel?: number
+  isolation?: 'worktree' | 'copy' | 'none'
+  dir?: string
+  autoApprove?: boolean
+  background?: boolean
+}
+
+/** decide's arguments; register.tsx checks `questions` with checkQuestions. */
+export type DecideInput = {
+  model?: 'kev' | 'laya' | 'both'
+  state: unknown
+  questions: Record<string, unknown>
+  raw?: boolean
+}
+
 declare module 'claude-code' {
+  // Types each tool.call hook's `e`. The model can still send anything, so the hooks keep their checks.
+  interface McpToolInputs {
+    'mcp__opencode-go__delegate': DelegateInput
+    'mcp__opencode-go__delegate_batch': DelegateBatchInput
+    'mcp__opencode-go__decide': DecideInput
+  }
+
   interface PluginState {
     'opencode-go': {
       catalog: Catalog

@@ -58,9 +58,7 @@ test('chat mode answers the turn through OpenCode Go', async ($, on) => {
   // Off: the step goes to Claude.
   const before = await step($)
   expect(before.result.answer).toBe('from claude')
-  // The local decision models' health pings are not chat requests.
-  const sent = () => fetched.filter(f => !f.url.startsWith('http://127.0.0.1:'))
-  expect(sent().length).toBe(0)
+  expect(fetched.length).toBe(0)
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ready(ui)
@@ -69,8 +67,8 @@ test('chat mode answers the turn through OpenCode Go', async ($, on) => {
   await ui.unmount()
 
   const { chunks, result } = await step($)
-  const [req] = sent()
-  expect(sent().length).toBe(1)
+  const [req] = fetched
+  expect(fetched.length).toBe(1)
   expect(req.url).toBe('https://opencode.ai/inference/go/anthropic/v1/messages')
   expect(req.init.headers.authorization).toBe('Bearer test-key')
   expect(req.init.headers['x-opencode-session']).toMatch(/^[0-9a-f-]{36}$/)

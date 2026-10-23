@@ -70,7 +70,11 @@ export function engine(on: any, store: Map<string, unknown>, spawned: string[][]
     ],
   }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'You are Claude Code.', scope: 'shared' }] }))
-  on('http.fetch', (_: any, e: any) => (fetched.push(e), { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(REPLY) } }))
+  on('http.fetch', (_: any, e: any) => {
+    // session.start pings the local decision models; none runs here, and the pings are not counted.
+    if (e.url.startsWith('http://127.0.0.1:')) return { value: { status: 503, ok: false, headers: {}, text: '' } }
+    return (fetched.push(e), { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(REPLY) } })
+  })
   on('process.run', (_: any, e: any) => ({
     value: {
       exitCode: 0,

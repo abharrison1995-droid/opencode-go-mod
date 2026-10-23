@@ -1,10 +1,11 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, LocalName, LocalServer, ModelHealth, Preset, Preview, Spend, WorkerModel } from '../types'
+import type { Batch, BatchSummary, BatchTask, Catalog, DecideInput, DelegateBatchInput, DelegateInput, Effort, Job, LocalName, LocalServer, ModelHealth, Preset, Preview, Spend, WorkerModel } from '../types'
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
 import { findOpencode, fullId, isFree, loadCatalog, price, readCache, worker, writeCache } from './catalog'
+import { batchesText, diffText, effortText, HELP, historyText, localText, matchJob, matchModel, modelsText, parseArgs, presetsText, statusText } from './commands'
 import { chatTools, explainError, readKey, requestBody, sendWithRetry, toMessages } from './chat'
 import { cancel, track, tracked, untrack } from './control'
 import { attachedChars, budgetMessage, contextVerdict, contextWarning, dailySpent, formatReport, localDate, notify, overContext, resolveDir, runResilient } from './delegate'
@@ -15,9 +16,9 @@ import { ladder } from './ladder'
 import { askLocal, checkQuestions, formatAnswers, LOCAL, localNamed, ping, startLocal, stopLocal } from './local'
 import type { LocalOptions, LocalSpec } from './local'
 import type { Rung } from './ladder'
-import { ageOf, ICONS, panel, shortModel } from './panel'
+import { panel } from './panel'
 import type { PanelView } from './panel'
-import { EFFORTS, PRESETS, presetNamed, rate } from './presets'
+import { EFFORTS, presetNamed, rate } from './presets'
 import { batchReport, batchShortReport, changedFiles, delegateShort, writeReport } from './report'
 import type { ReportExtras } from './report'
 import { resolveConflict } from './resolve'
@@ -618,30 +619,7 @@ export const register: Register = (on, options) => {
   })
 
   on('command.run', { command: 'opencode' }, async ($, e) => {
-    const args = e.args.trim()
-    const gap = args.indexOf(' ')
-    const sub = (gap < 0 ? args : args.slice(0, gap)).toLowerCase()
-    const rest = gap < 0 ? '' : args.slice(gap + 1).trim()
-    const help = [
-      'OpenCode commands:',
-      '  /opencode                      open the panel',
-      '  /opencode model <name>         pick the worker model',
-      '  /opencode effort <level>       set reasoning: low, medium, high, xhigh, max',
-      '  /opencode chat on|off          send this chat through OpenCode Go',
-      '  /opencode models [free|paid]   list models',
-      '  /opencode preset [name]        apply or list model presets',
-      '  /opencode batches              list this chat\'s batches',
-      '  /opencode cancel <id>|all      stop a job, batch or every run',
-      '  /opencode diff <batch> <task>  show a task branch\'s diff',
-      '  /opencode merge <batch> <task> merge a task branch',
-      '  /opencode discard <batch> <task> remove a task\'s worktree and branch',
-      '  /opencode resume <batch> <task> continue a failed or cancelled task',
-      '  /opencode history              recent batches and spend by model',
-      '  /opencode status               what is running and what it cost',
-      '  /opencode local [start|stop] [kev|laya]  local decision models',
-      '  /opencode selftest             check hang detection, rate limits and notifications here',
-      '  /opencode help                 this list',
-    ].join('\n')
+    const { sub, rest } = parseArgs(e.args)
 
     const models = async () => {
       if ((await read($, catalog)).models.length === 0) await refresh($)
@@ -655,26 +633,17 @@ export const register: Register = (on, options) => {
       return { text: `OpenCode panel opened. Worker: ${await current($, defaultModel)} · ${await read($, effort)}${isChat ? ' · chat mode on' : ''}` }
     }
 
-    if (sub === 'help') return { text: help }
+    if (sub === 'help') return { text: HELP }
 
     if (sub === 'selftest') return { text: formatChecks(await selfTest($, { bin: await findOpencode($), dir: sessionCwd })) }
 
     if (sub === 'model') {
       if (rest === '') return { text: 'Usage: /opencode model <name>.' }
       const { free, paid } = worker(await models())
-      const list = [...free, ...paid]
-      const q = rest.toLowerCase()
-      const exact = list.find(m => m.id === rest) ?? list.find(m => m.id === fullId(rest))
-      const found = exact !== undefined ? [exact] : list.filter(m => m.id.toLowerCase().includes(q) || m.name.toLowerCase().includes(q))
-      if (found.length === 0) return { text: `No model matches "${rest}". Try /opencode models.` }
-      if (found.length > 1) {
-        const ids = found.slice(0, 8).map(m => m.id)
-        return { text: `Several match: ${ids.join(', ')}${found.length > 8 ? ' …' : ''}` }
-      }
-      const only = found[0]
-      if (only === undefined) return { text: `No model matches "${rest}". Try /opencode models.` }
-      await pick($, only.id)
-      return { text: `Worker: ${only.name} (${only.id})` }
+      const found = matchModel([...free, ...paid], rest, fullId)
+      if ('text' in found) return found
+      await pick($, found.model.id)
+      return { text: `Worker: ${found.model.name} (${found.model.id})` }
     }
 
     if (sub === 'effort') {
@@ -682,12 +651,7 @@ export const register: Register = (on, options) => {
       const level = rest as Effort
       await pickEffort($, level)
       const pickedId = await current($, defaultModel)
-      const known = (await read($, catalog)).models.find(m => m.id === pickedId)
-      const note =
-        known !== undefined && !known.efforts.includes(level)
-          ? ` (${known.name} takes ${known.efforts.join(', ') || 'no reasoning levels'}; it runs at its default)`
-          : ''
-      return { text: `Reasoning: ${level}${note}` }
+      return { text: effortText(level, (await read($, catalog)).models.find(m => m.id === pickedId)) }
     }
 
     if (sub === 'chat') {
@@ -703,11 +667,7 @@ export const register: Register = (on, options) => {
 
     if (sub === 'models') {
       const { free, paid } = worker(await models())
-      const line = (m: WorkerModel) => `${m.id} · ${isFree(m) ? 'free' : `${price(m.input)}/${price(m.output)}`}`
-      const sections: [string, WorkerModel[]][] = []
-      if (rest !== 'paid') sections.push(['FREE', free])
-      if (rest !== 'free') sections.push(['PAID', paid])
-      return { text: sections.map(([title, list]) => `${title}\n${list.length ? list.map(line).join('\n') : '(none)'}`).join('\n\n') }
+      return { text: modelsText(free, paid, rest) }
     }
 
     if (sub === 'local') {
@@ -729,37 +689,27 @@ export const register: Register = (on, options) => {
         return { text: lines.join('\n') }
       }
       await refreshLocal($)
-      const all = await read($, local)
-      return { text: specs.map(x => `${x.label} :${x.port} · ${all[x.name]?.status ?? 'off'}${all[x.name]?.error ? ` · ${all[x.name]?.error}` : ''}`).join('\n') }
+      return { text: localText(specs, await read($, local)) }
     }
 
     if (sub === 'status') {
-      const isChat = await read($, chat)
-      const running = await read($, jobs)
-      const live = (await read($, batches)).filter(b => b.status === 'running')
       const money = await read($, spend)
-      const total = Number((await $.store.get('spendTotal')) ?? 0) || 0
-      const lines = [
-        `Worker: ${await current($, defaultModel)} · ${await read($, effort)}`,
-        `Chat mode: ${isChat ? 'on' : 'off'}`,
-        `Running delegate jobs: ${running.length}`,
-        live.length
-          ? `Batches: ${live.length} running\n${live.map(b => `  ${b.title} · ${b.tasks.filter(t => t.status === 'done').length}/${b.tasks.length}`).join('\n')}`
-          : 'Batches: none running',
-        `Spend: $${money.session.toFixed(4)} this chat over ${money.runs} runs · $${total.toFixed(2)} all time`,
-      ]
-      return { text: lines.join('\n') }
+      return {
+        text: statusText({
+          model: await current($, defaultModel),
+          level: await read($, effort),
+          isChat: await read($, chat),
+          running: await read($, jobs),
+          batches: await read($, batches),
+          session: money.session,
+          runs: money.runs,
+          total: Number((await $.store.get('spendTotal')) ?? 0) || 0,
+        }),
+      }
     }
 
     if (sub === 'preset') {
-      const list = async (prefix: string) => {
-        const nowModel = await current($, defaultModel)
-        const nowLevel = await read($, effort)
-        const rows = PRESETS.map(
-          p => `${p.name}${p.model === nowModel && p.effort === nowLevel ? ' (current)' : ''} · ${p.model} · ${p.effort} · ${p.note}`,
-        )
-        return { text: [prefix, ...rows].filter(line => line !== '').join('\n') }
-      }
+      const list = async (prefix: string) => ({ text: presetsText(prefix, await current($, defaultModel), await read($, effort)) })
       if (rest === '') return list('Presets:')
       const preset = presetNamed(rest)
       if (preset === undefined) return list(`Unknown preset "${rest}". Presets:`)
@@ -767,18 +717,7 @@ export const register: Register = (on, options) => {
       return { text: `Preset ${preset.name}: ${preset.model} · ${preset.effort}` }
     }
 
-    if (sub === 'batches') {
-      const list = await read($, batches)
-      if (list.length === 0) return { text: 'No batches in this chat.' }
-      const lines: string[] = []
-      for (const b of [...list].sort((a, c) => c.startedAt - a.startedAt)) {
-        const done = b.tasks.filter(t => t.status === 'done').length
-        const cost = b.tasks.reduce((n, t) => n + t.cost, 0)
-        lines.push(`${b.id} · ${b.title} · ${b.status} · ${done}/${b.tasks.length} · $${cost.toFixed(4)}`)
-        for (const t of b.tasks) lines.push(`  ${ICONS[t.status]} ${t.id} ${t.status}`)
-      }
-      return { text: lines.join('\n') }
-    }
+    if (sub === 'batches') return { text: batchesText(await read($, batches)) }
 
     if (sub === 'cancel') {
       if (rest === '') return { text: 'Usage: /opencode cancel <id>|all.' }
@@ -792,14 +731,9 @@ export const register: Register = (on, options) => {
         const stopped = cancel(`batch:${batch.id}`)
         return { text: stopped || batch.status === 'running' ? `Cancelling batch ${batch.id}.` : `Batch ${batch.id} is not running.` }
       }
-      const list = await read($, jobs)
-      const exact = list.find(j => j.id === rest)
-      const matches = exact !== undefined ? [exact] : list.filter(j => j.id.startsWith(rest))
-      if (matches.length === 0) return { text: `Nothing matches "${rest}".` }
-      if (matches.length > 1) return { text: `Several jobs match: ${matches.map(j => j.id).join(', ')}` }
-      const only = matches[0]
-      if (only === undefined) return { text: `Nothing matches "${rest}".` }
-      return { text: cancel(only.id) ? `Cancelling ${only.id}.` : `${only.id} is not running.` }
+      const found = matchJob(await read($, jobs), rest)
+      if ('text' in found) return found
+      return { text: cancel(found.job.id) ? `Cancelling ${found.job.id}.` : `${found.job.id} is not running.` }
     }
 
     if (sub === 'merge' || sub === 'discard' || sub === 'diff' || sub === 'resume') {
@@ -812,28 +746,12 @@ export const register: Register = (on, options) => {
         return { text: `Resuming ${batch}/${task}.` }
       }
       const result = await taskAction($, sub, batch, task)
-      if (sub !== 'diff') return { text: result.text }
-      const lines = result.text.split('\n')
-      const shown = lines.slice(0, 200).join('\n')
-      return { text: lines.length > 200 ? `${shown}\n… ${lines.length - 200} more lines` : shown }
+      return { text: sub === 'diff' ? diffText(result.text) : result.text }
     }
 
-    if (sub === 'history') {
-      const finished = [...(await read($, history))].slice(-10).reverse()
-      const byModel = Object.entries(await read($, spendByModel))
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([id, usd]) => `${shortModel(id)} $${usd.toFixed(2)}`)
-      const lines = [
-        finished.length === 0
-          ? 'No finished batches yet.'
-          : finished.map(entry => `${entry.title} · ${entry.status} · ${entry.done}/${entry.tasks} · $${entry.cost.toFixed(4)} · ${ageOf(entry.endedAt)}`).join('\n'),
-        byModel.length > 0 ? `Spend by model:\n${byModel.join('\n')}` : '',
-      ]
-      return { text: lines.filter(line => line !== '').join('\n\n') }
-    }
+    if (sub === 'history') return { text: historyText(await read($, history), await read($, spendByModel)) }
 
-    return { text: `Unknown subcommand. ${help}` }
+    return { text: `Unknown subcommand. ${HELP}` }
   })
 
   on('prompt.compose', async ($, e, next) => {
@@ -918,7 +836,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
   })
 
   on('tool.call', { tool: DECIDE_TOOL }, async ($, e) => {
-    const input = e as unknown as { model?: string; state?: unknown; questions?: unknown; raw?: boolean }
+    const input: DecideInput = e
     if (input.state === undefined || input.state === '') return { deny: 'decide needs a state: the text the questions are about.' }
     const bad = checkQuestions(input.questions)
     if (bad) return { deny: `decide: ${bad}` }
@@ -933,20 +851,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
   }))
 
   on('tool.call', { tool: TOOL }, async ($, e, next) => {
-    const input = e as unknown as {
-      prompt?: string
-      model?: string
-      profile?: string
-      effort?: string
-      dir?: string
-      sessionId?: string
-      autoApprove?: boolean
-      readOnly?: boolean
-      files?: string[]
-      verify?: string
-      verifyRounds?: number
-      report?: string
-    }
+    const input: DelegateInput = e
     if (typeof input.prompt !== 'string' || input.prompt.trim() === '') return { deny: 'delegate needs a prompt.' }
 
     const bin = await findOpencode($)
@@ -1089,25 +994,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
 
   on('tool.call', { tool: BATCH_TOOL }, async ($, e, next) => {
     type TaskSpec = BatchTaskSpec & { profile?: string }
-    const input = e as unknown as {
-      title?: string
-      tasks?: TaskSpec[]
-      maxParallel?: number
-      isolation?: Isolation
-      dir?: string
-      autoApprove?: boolean
-      background?: boolean
-      shared?: string
-      files?: string[]
-      verify?: string
-      verifyRounds?: number
-      maxCost?: number
-      profile?: string
-      autoMerge?: boolean
-      autoResolve?: boolean
-      review?: boolean
-      report?: string
-    }
+    const input: DelegateBatchInput = e
     if (typeof input.title !== 'string' || input.title.trim() === '') return { deny: 'delegate_batch needs a title.' }
     const specs: TaskSpec[] = Array.isArray(input.tasks) ? input.tasks : []
     if (specs.some(t => t === null || typeof t !== 'object')) return { deny: 'Every task needs an id.' }

@@ -11,11 +11,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `kevGpuGb` splits Kev between the GPU and system RAM (`scripts/kev_split.py`, using accelerate), so Kev-4B runs on an 8 GB card.
 - MIT license.
 - Tests for the local servers and `decide`: start, reuse, crash and timeout, one start at a time, Stop, `askLocal` errors, `/opencode local`, and the LOCAL panel.
+- Tests for `scripts/kev_split.py` (`scripts/test_kev_split.py`, with stand-ins for torch, Kev and accelerate) and for the `/opencode` subcommands' matching and text.
+- `scripts/typecheck.sh` type-checks the mod against the engine's declarations.
+- The tool inputs are typed: `DelegateInput`, `DelegateBatchInput` and `DecideInput` in `types/index.d.ts` type each `tool.call` hook's `e`, so a misspelled field fails the type-check.
 
 ### Changed
 
 - Local models take turns: servers start one at a time, and `model: "both"` asks Kev and then Laya instead of both at once.
 - The panel's drawing moved from register.tsx to `hooks/panel.tsx`; register.tsx now reads the state and passes in callbacks. Nothing it shows or does changed.
+- The `/opencode` subcommands' parsing and text moved to `hooks/commands.ts`, the same way.
+- testkit's engine answers the local models' health pings with a 503 and leaves them out of `fetched`.
 
 ### Fixed
 
