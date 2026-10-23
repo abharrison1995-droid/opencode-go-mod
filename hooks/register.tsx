@@ -4,7 +4,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { Batch, BatchSummary, BatchTask, Catalog, DecideInput, DelegateBatchInput, DelegateInput, Effort, Job, LocalName, LocalServer, ModelHealth, Preset, Preview, Spend, WorkerModel } from '../types'
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
-import { findOpencode, fullId, isFree, loadCatalog, price, readCache, worker, writeCache } from './catalog'
+import { costsMoney, findOpencode, fullId, isFree, loadCatalog, price, readCache, worker, writeCache } from './catalog'
 import { batchesText, diffText, effortText, HELP, historyText, localText, matchJob, matchModel, modelsText, parseArgs, presetsText, statusText } from './commands'
 import { chatTools, explainError, readKey, requestBody, sendWithRetry, toMessages } from './chat'
 import { cancel, track, tracked, untrack } from './control'
@@ -51,11 +51,11 @@ const PANE = 'opencode'
 let sessionCwd = ''
 
 function describe(models: WorkerModel[], health: Record<string, ModelHealth> = {}) {
-  const { free, paid } = worker(models)
+  const { free, paid, plan } = worker(models)
   const shown = paid.slice(0, 8).map(m => `${m.id} (${price(m.input)}/${price(m.output)})`).join(', ')
   const more = paid.length > 8 ? `, and ${paid.length - 8} more in the OpenCode panel` : ''
   const shaky = (id: string) => (rate(health[id]) === 'shaky' ? ' (shaky)' : '')
-  const unreliable = [...free, ...paid].filter(m => rate(health[m.id]) === 'bad').map(m => m.id)
+  const unreliable = [...free, ...paid, ...plan].filter(m => rate(health[m.id]) === 'bad').map(m => m.id)
   return `Delegate a self-contained task to a cheaper model through the user's OpenCode Go subscription, run as a full opencode agent (it can read, edit and run commands in the given directory), and wait for its answer.
 
 Use it for routine, well-specified work: boilerplate, bulk edits, writing tests to a clear spec, summarising files, first drafts, mechanical refactors. Keep planning, judgement and review for yourself, and check what it changed (git diff, tests) before reporting success.
@@ -71,9 +71,9 @@ Several delegate calls in one message may run one after another rather than toge
 Set readOnly true for research, review or planning: it runs opencode's read-only plan agent, which cannot edit files.
 
 FREE: ${free.map(m => `${m.id}${shaky(m.id)}`).join(', ') || 'none right now'}
-PAID (cheapest first, $ in/out per Mtok): ${shown || 'none right now'}${more}${unreliable.length > 0 ? `\nUnreliable right now: ${unreliable.join(', ')}` : ''}
+PAID (cheapest first, $ in/out per Mtok): ${shown || 'none right now'}${more}${plan.length > 0 ? `\nZ.AI PLAN (the user's GLM Coding Plan: no per-token cost, draws on the plan's prompt quota): ${plan.map(m => `${m.id}${shaky(m.id)}`).join(', ')}` : ''}${unreliable.length > 0 ? `\nUnreliable right now: ${unreliable.join(', ')}` : ''}
 
-Do not pick a paid model other than the user's choice unless they ask. Paid models drain the user's Go allowance.`
+Do not pick a paid model other than the user's choice unless they ask. Paid models drain the user's Go allowance; Z.AI PLAN models drain the Coding Plan's quota.`
 }
 
 async function registerTool($: EngineInterface, models: WorkerModel[]) {
@@ -639,8 +639,8 @@ export const register: Register = (on, options) => {
 
     if (sub === 'model') {
       if (rest === '') return { text: 'Usage: /opencode model <name>.' }
-      const { free, paid } = worker(await models())
-      const found = matchModel([...free, ...paid], rest, fullId)
+      const { free, paid, plan } = worker(await models())
+      const found = matchModel([...free, ...paid, ...plan], rest, fullId)
       if ('text' in found) return found
       await pick($, found.model.id)
       return { text: `Worker: ${found.model.name} (${found.model.id})` }
@@ -659,15 +659,15 @@ export const register: Register = (on, options) => {
       if (want !== 'on' && want !== 'off') return { text: 'Usage: /opencode chat on|off.' }
       const model = await current($, defaultModel)
       if (want === 'on' && !model.startsWith('opencode-go/')) {
-        return { text: `Chat mode needs a Go model. ${model} is a Zen model, which OpenCode only serves to its own app. Pick a Go model with /opencode model <name>.` }
+        return { text: `Chat mode needs a Go model. ${model} is not one: Zen models are served only to OpenCode's own app, and Z.AI Coding Plan models run through delegate. Pick a Go model with /opencode model <name>.` }
       }
       await setChat($, want === 'on', model)
       return { text: want === 'on' ? `Chat mode on: this chat now runs on ${model}.` : 'Chat mode off: this chat is back on Claude.' }
     }
 
     if (sub === 'models') {
-      const { free, paid } = worker(await models())
-      return { text: modelsText(free, paid, rest) }
+      const { free, paid, plan } = worker(await models())
+      return { text: modelsText(free, paid, plan, rest) }
     }
 
     if (sub === 'local') {
@@ -771,7 +771,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const stop = (text: string) => ({ kind: 'text' as const, index: 0, text })
     const failed = { turnId: e.turnId, index: e.index, toolUses: [], stopReason: 'end_turn' as const, usage: null }
     if (!modelId.startsWith('opencode-go/')) {
-      const text = `OpenCode chat mode needs a Go model. ${modelId} is a Zen model, which OpenCode only serves to its own app. Pick a Go model in the OpenCode panel.`
+      const text = `OpenCode chat mode needs a Go model. ${modelId} is not one: Zen models are served only to OpenCode's own app, and Z.AI Coding Plan models run through delegate. Pick a Go model in the OpenCode panel.`
       yield stop(text)
       return { ...failed, answer: text }
     }
@@ -875,7 +875,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       .filter((file): file is string => file !== undefined)
 
     const budget = Number(options.dailyBudget ?? 0) || 0
-    if (budget > 0 && known !== undefined && !isFree(known)) {
+    if (budget > 0 && known !== undefined && costsMoney(known)) {
       const spent = await dailySpent($, localDate(Date.now()))
       if (spent >= budget) return { deny: budgetMessage(budget, spent) }
     }
@@ -1112,7 +1112,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       if (verdict !== undefined && verdict.level === 'over') {
         return { status: 'failed' as const, cost: 0, steps: 0, error: overContext(verdict) }
       }
-      if (dailyBudget > 0 && known !== undefined && !isFree(known)) {
+      if (dailyBudget > 0 && known !== undefined && costsMoney(known)) {
         const spent = await dailySpent($, localDate(Date.now()))
         if (spent >= dailyBudget) return { status: 'skipped' as const, cost: 0, steps: 0, error: budgetMessage(dailyBudget, spent) }
       }

@@ -1,5 +1,5 @@
 import type { Batch, BatchSummary, Effort, Job, LocalServer, Preset, WorkerModel } from '../types'
-import { isFree, price } from './catalog'
+import { isFree, isPlan, price } from './catalog'
 import type { LocalSpec } from './local'
 import { ageOf, ICONS, shortModel } from './panel'
 import { PRESETS } from './presets'
@@ -12,7 +12,7 @@ export const HELP = [
   '  /opencode model <name>         pick the worker model',
   '  /opencode effort <level>       set reasoning: low, medium, high, xhigh, max',
   '  /opencode chat on|off          send this chat through OpenCode Go',
-  '  /opencode models [free|paid]   list models',
+  '  /opencode models [free|paid|zai] list models',
   '  /opencode preset [name]        apply or list model presets',
   '  /opencode batches              list this chat\'s batches',
   '  /opencode cancel <id>|all      stop a job, batch or every run',
@@ -57,11 +57,12 @@ export function effortText(level: Effort, known: WorkerModel | undefined) {
   return `Reasoning: ${level}${note}`
 }
 
-export function modelsText(free: WorkerModel[], paid: WorkerModel[], rest: string) {
-  const line = (m: WorkerModel) => `${m.id} · ${isFree(m) ? 'free' : `${price(m.input)}/${price(m.output)}`}`
+export function modelsText(free: WorkerModel[], paid: WorkerModel[], plan: WorkerModel[], rest: string) {
+  const line = (m: WorkerModel) => `${m.id} · ${isPlan(m) ? 'Z.AI plan' : isFree(m) ? 'free' : `${price(m.input)}/${price(m.output)}`}`
   const sections: [string, WorkerModel[]][] = []
-  if (rest !== 'paid') sections.push(['FREE', free])
-  if (rest !== 'free') sections.push(['PAID', paid])
+  if (rest === '' || rest === 'free') sections.push(['FREE', free])
+  if (rest === '' || rest === 'paid') sections.push(['PAID', paid])
+  if (rest === '' || rest === 'zai') sections.push(['Z.AI PLAN', plan])
   return sections.map(([title, list]) => `${title}\n${list.length ? list.map(line).join('\n') : '(none)'}`).join('\n\n')
 }
 

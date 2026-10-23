@@ -1,7 +1,7 @@
 import type { ElementTable, RenderElement, RenderSurface } from 'claude-code'
 
 import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, LocalServer, ModelHealth, Phase, Preset, Preview, Spend, WorkerModel } from '../types'
-import { colorOf, isFree, price, worker } from './catalog'
+import { colorOf, isFree, isPlan, price, worker } from './catalog'
 import { cancel } from './control'
 import { repoOf } from './git'
 import type { TaskAction } from './git'
@@ -97,7 +97,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
   const { cat, model, level, isChat, running, liveBatches, money, spendTotal, recentIds, allOpen, folds, healthData, historyList, byModel, shownPreview, localNow } = v
   const search = v.query.trim().toLowerCase()
   const selected = cat.models.find(m => m.id === model)
-  const { free, paid } = worker(cat.models)
+  const { free, paid, plan } = worker(cat.models)
   const isMobile = surface === 'mobile'
   const recentModels = recentIds
     .map(id => cat.models.find(m => m.id === id))
@@ -144,7 +144,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
 
   const row = (m: WorkerModel, chip: string) => {
     const isPicked = m.id === model
-    const chatOnly = isChat && m.source === 'zen'
+    const chatOnly = isChat && m.source !== 'go'
     return (
       <Button key={`model:${m.id}`} plain onPress={() => act.pick(m.id)}>
         <Text bold={isPicked} color={isPicked ? 'suggestion' : undefined} dimColor={chatOnly}>
@@ -158,7 +158,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
     )
   }
 
-  const section = (key: string, title: string, color: 'success' | 'warning', hint: string, list: WorkerModel[], chip: (m: WorkerModel) => string) => {
+  const section = (key: string, title: string, color: 'success' | 'warning' | 'suggestion', hint: string, list: WorkerModel[], chip: (m: WorkerModel) => string) => {
     const shown = list.filter(matches)
     if (shown.length === 0) return undefined
     const sectionOpen = isOpen(key, true)
@@ -207,7 +207,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
           {isChat
             ? model.startsWith('opencode-go/')
               ? `Every turn goes to ${selected?.name ?? model}. Core tools only; replies arrive a step at a time.`
-              : 'Pick a Go model: Zen models only work through delegate.'
+              : 'Pick a Go model: Zen and Z.AI models only work through delegate.'
             : 'Claude answers and hands work to OpenCode with delegate.'}
         </Text>
       </Box>
@@ -221,7 +221,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
         <Text dimColor>
           {selected?.maker ? `${selected.maker} · ` : ''}
           {model}
-          {selected ? (isFree(selected) ? ' · free' : ` · ${price(selected.input)}/${price(selected.output)} per Mtok`) : ''}
+          {selected ? (isPlan(selected) ? ' · Z.AI Coding Plan' : isFree(selected) ? ' · free' : ` · ${price(selected.input)}/${price(selected.output)} per Mtok`) : ''}
         </Text>
         {modelHealth !== undefined && (modelRating === 'shaky' || modelRating === 'bad') && (
           <Text dimColor size="caption">
@@ -452,12 +452,12 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
       {isMobile && recentModels.length > 0 && (
         <Box flexDirection="column">
           <Text dimColor size="caption">RECENT</Text>
-          {recentModels.map(m => row(m, isFree(m) ? (m.source === 'go' ? 'Go' : 'Zen') : `${price(m.input)}/${price(m.output)}`))}
+          {recentModels.map(m => row(m, isPlan(m) ? 'Z.AI' : isFree(m) ? (m.source === 'go' ? 'Go' : 'Zen') : `${price(m.input)}/${price(m.output)}`))}
         </Box>
       )}
 
       {isMobile && (
-        <Button key="showAll" plain onPress={() => act.toggleShowAll()} label={allOpen ? 'Hide all models' : `All models (${free.length + paid.length})`} />
+        <Button key="showAll" plain onPress={() => act.toggleShowAll()} label={allOpen ? 'Hide all models' : `All models (${free.length + paid.length + plan.length})`} />
       )}
       {isMobile && <Text dimColor size="caption">{'Or type /opencode model <name>'}</Text>}
 
@@ -477,6 +477,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
 
       {(!isMobile || allOpen) && section('free', 'FREE', 'success', 'No cost while OpenCode offers them', free, m => (m.source === 'go' ? 'Go' : 'Zen'))}
       {(!isMobile || allOpen) && section('paid', 'PAID', 'warning', 'Uses your Go allowance · $ in/out per Mtok', paid, m => `${price(m.input)}/${price(m.output)}`)}
+      {(!isMobile || allOpen) && section('zai', 'Z.AI PLAN', 'suggestion', 'Uses your Z.AI Coding Plan quota · no per-token cost', plan, m => (m.id.startsWith('zhipuai') ? 'bigmodel.cn' : 'z.ai'))}
 
       <Button key="refresh" plain dimColor onPress={() => act.refresh()}>
         ↻ Refresh models

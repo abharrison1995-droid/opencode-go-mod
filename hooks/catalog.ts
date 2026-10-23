@@ -2,7 +2,11 @@ import type { EngineInterface } from 'claude-code'
 
 import type { Catalog, WorkerModel } from '../types'
 
-export const isFree = (m: WorkerModel) => m.input === 0 && m.output === 0
+// A Z.AI Coding Plan model lists $0 but draws on the plan's prompt quota, so it is neither free nor paid.
+export const isPlan = (m: WorkerModel) => m.source === 'zai'
+export const isFree = (m: WorkerModel) => !isPlan(m) && m.input === 0 && m.output === 0
+/** Whether a run on the model spends dollars, and so counts against the daily budget. */
+export const costsMoney = (m: WorkerModel) => !isFree(m) && !isPlan(m)
 export const price = (n: number) => `$${n < 1 ? n.toFixed(2).replace(/0$/, '') : n}`
 export const fullId = (id: string) => (id.includes('/') ? id : `opencode-go/${id}`)
 
@@ -61,10 +65,16 @@ export async function findOpencode($: EngineInterface): Promise<string | undefin
   return undefined
 }
 
+// The providers opencode serves the Z.AI (GLM) Coding Plan through: z.ai, and bigmodel.cn in China.
+export const PLAN_PROVIDERS = ['zai-coding-plan', 'zhipuai-coding-plan']
+
+const sourceOf = (id: string): WorkerModel['source'] =>
+  id.startsWith('opencode-go/') ? 'go' : PLAN_PROVIDERS.includes(id.split('/')[0] ?? '') ? 'zai' : 'zen'
+
 // `opencode models --verbose` prints each model as a `provider/id` line followed by its JSON.
 export function parseModels(out: string): WorkerModel[] {
   const models: WorkerModel[] = []
-  for (const block of out.split(/^(?=(?:opencode|opencode-go)\/\S+$)/m)) {
+  for (const block of out.split(/^(?=(?:opencode|opencode-go|zai-coding-plan|zhipuai-coding-plan)\/\S+$)/m)) {
     const nl = block.indexOf('\n')
     if (nl < 0) continue
     const id = block.slice(0, nl).trim()
@@ -78,7 +88,7 @@ export function parseModels(out: string): WorkerModel[] {
     models.push({
       id,
       name: m.name ?? id,
-      source: id.startsWith('opencode-go/') ? 'go' : 'zen',
+      source: sourceOf(id),
       maker: makerOf(id),
       input: Number(m.cost?.input ?? 0),
       output: Number(m.cost?.output ?? 0),
@@ -90,8 +100,8 @@ export function parseModels(out: string): WorkerModel[] {
   return models
 }
 
-// What the panel lists: every free model (Go's copy first), and Go's paid ones. Zen's paid
-// models bill pay-as-you-go credit, not the Go plan, so they are left out.
+// What the panel lists: every free model (Go's copy first), Go's paid ones, and the Z.AI Coding
+// Plan's. Zen's paid models bill pay-as-you-go credit, not the Go plan, so they are left out.
 export function worker(models: WorkerModel[]) {
   const goFree = new Set(models.filter(m => m.source === 'go' && isFree(m)).map(m => m.id.split('/')[1]))
   const free = models
@@ -100,7 +110,8 @@ export function worker(models: WorkerModel[]) {
   const paid = models
     .filter(m => m.source === 'go' && !isFree(m))
     .sort((a, b) => a.input + a.output - (b.input + b.output))
-  return { free, paid }
+  const plan = models.filter(isPlan).sort((a, b) => a.name.localeCompare(b.name))
+  return { free, paid, plan }
 }
 
 const CACHE = 'catalog'
@@ -111,7 +122,7 @@ const isModel = (m: unknown): m is WorkerModel => {
   return (
     typeof x.id === 'string' &&
     typeof x.name === 'string' &&
-    (x.source === 'go' || x.source === 'zen') &&
+    (x.source === 'go' || x.source === 'zen' || x.source === 'zai') &&
     typeof x.maker === 'string' &&
     typeof x.input === 'number' &&
     typeof x.output === 'number' &&

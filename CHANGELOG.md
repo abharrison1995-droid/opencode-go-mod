@@ -4,6 +4,17 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.9.0]
+
+### Added
+
+- Z.AI Coding Plan: models from opencode's `zai-coding-plan` (z.ai) and `zhipuai-coding-plan` (bigmodel.cn) providers appear in a Z.AI PLAN section of the OpenCode panel, in `/opencode models zai`, and in the delegate tool's model list. They run through `delegate` and `delegate_batch` like any other worker.
+- `isPlan` and `costsMoney` in `hooks/catalog.ts`.
+
+### Changed
+
+- Z.AI Coding Plan models list $0 but are not counted as free: the ladder profile does not pick them, and the daily budget does not block them, since they draw on the plan's prompt quota, not dollars.
+
 ## [0.8.1]
 
 ### Added

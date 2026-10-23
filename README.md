@@ -45,6 +45,18 @@ In the desktop app, where `/plugin` does not run: click + next to the prompt box
 - The OpenCode panel and `/opencode` commands cover models, reasoning, presets, batches, history and cancel.
 - Chat mode answers turns through OpenCode Go's Anthropic-compatible endpoint.
 
+## Z.AI Coding Plan
+
+A Z.AI (GLM) Coding Plan subscription works as a third source of workers beside OpenCode Go and Zen. Connect it to opencode once:
+
+```bash
+opencode auth login
+```
+
+Pick **Z.AI Coding Plan** (or **Zhipu AI Coding Plan** for a bigmodel.cn subscription) and paste the plan's API key. Then press ↻ Refresh models in the OpenCode panel: the GLM models appear under Z.AI PLAN, and `delegate` can run them by id, e.g. `zai-coding-plan/glm-5.3`.
+
+Plan models have no per-token cost, so the daily budget never blocks them, but they are not treated as free either: they use the plan's prompt quota, and the `ladder` profile leaves them out. Chat mode stays on Go models.
+
 ## Local decision models (Kev, Laya)
 
 `decide` asks a small model on your own machine typed questions about a piece of text: yes/no (`noul`), one-of (`choice`) or a scale (`score`). It returns calibrated probabilities, with nothing generated. It is free, private, and takes milliseconds once the model is loaded. Claude uses it for cheap, repeatable judgements such as triage, routing and classification.
@@ -99,7 +111,7 @@ On mobile the panel is compact: it shows the worker, reasoning and presets, rece
 | `/opencode effort <level>` | Sets reasoning to `low`, `medium`, `high`, `xhigh` or `max`. |
 | `/opencode chat on\|off` | Sends this chat's turns through OpenCode Go, or back to Claude. |
 | `/opencode preset [name]` | Applies a preset (`cheap`, `reliable`, `strong`) or lists them. |
-| `/opencode models [free\|paid]` | Lists models with free status or price. |
+| `/opencode models [free\|paid\|zai]` | Lists models with free status or price. |
 | `/opencode local [start\|stop] [kev\|laya]` | Shows, starts or stops the local decision models. |
 | `/opencode status` | Shows the worker, chat mode, running jobs and spend. |
 | `/opencode selftest` | Checks the CLI, git, hang detection, rate-limit detection, notifications and the report folder. |

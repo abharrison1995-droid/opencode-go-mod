@@ -5,8 +5,8 @@ export type WorkerModel = {
   /** provider/model, as `opencode run -m` takes it */
   id: string
   name: string
-  /** opencode-go/* is Go; opencode/* is Zen */
-  source: 'go' | 'zen'
+  /** opencode-go/* is Go; opencode/* is Zen; zai-coding-plan/* and zhipuai-coding-plan/* are the Z.AI Coding Plan */
+  source: 'go' | 'zen' | 'zai'
   /** who makes the model (Moonshot AI, Z.ai, ...) */
   maker: string
   /** USD per million tokens */
