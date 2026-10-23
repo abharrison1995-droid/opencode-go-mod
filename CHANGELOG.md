@@ -4,6 +4,23 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.8.1]
+
+### Added
+
+- `kevGpuGb` splits Kev between the GPU and system RAM (`scripts/kev_split.py`, using accelerate), so Kev-4B runs on an 8 GB card.
+- MIT license.
+
+### Changed
+
+- Local models take turns: servers start one at a time, and `model: "both"` asks Kev and then Laya instead of both at once.
+
+### Fixed
+
+- The hooks module loads under Claude Code 2.1.304, which refuses a closure that takes `$`; before this, every test that loaded the mod failed.
+- Tests match 2.1.304's engine types (`command.run`'s `origin` and `presentation`), and the mod and its tests type-check with no errors.
+- Chat-mode tests no longer count the local models' health pings as chat requests; the 503 retry test now exercises the retry.
+
 ## [0.8.0]
 
 ### Added
@@ -12,8 +29,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - LOCAL section in the OpenCode panel: each local model's status, call count and latency, with Start and Stop.
 - `/opencode local [status|start|stop] [kev|laya]`.
 - Options `localModelsDir`, `kevModel`, `localDevice` and `layaDevice`. Laya runs on the CPU by default, so Kev has the GPU.
-- `kevGpuGb` splits Kev between the GPU and system RAM (`scripts/kev_split.py`, using accelerate), so Kev-4B runs on an 8 GB card.
-- Local models take turns: servers start one at a time, and `model: "both"` asks Kev and then Laya instead of both at once.
 
 ## [0.7.0]
 

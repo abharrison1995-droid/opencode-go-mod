@@ -12,7 +12,7 @@ opencode-go is a Claude Code mod (a function-hooks plugin). It lets Claude deleg
   - command.run (the `/opencode` subcommands)
   - prompt.compose
   - turn.step (chat mode)
-  - tool.call for `delegate` and `delegate_batch`
+  - tool.call for `delegate`, `delegate_batch` and `decide`
   - ui.render (the OpenCode panel)
 - `hooks/delegate.ts`:
   - `runOpencode` is the spawn loop, with a stall watchdog and end reasons.
@@ -32,6 +32,9 @@ opencode-go is a Claude Code mod (a function-hooks plugin). It lets Claude deleg
 - `hooks/catalog.ts`: model list and cache.
 - `hooks/chat.ts`: chat mode.
 - `hooks/control.ts`: AbortController registry for cancel.
+- `hooks/local.ts`: the local decision models (Kev, Laya) behind `decide`: `startLocal`, `askLocal`, `stopLocal`, `ping`. The servers it spawns live in a module-level map, so a reload stops them.
+- `scripts/kev_split.py`: starts Kev split between the GPU and RAM when `kevGpuGb` is set. It runs outside the engine, in Kev's own venv.
+- `hooks/timers.d.ts`: declares `setTimeout` for the tests, which have host timers. Hooks code must not rely on it.
 - `hooks/testkit.ts`: shared test stand-ins. Don't edit it; copy from it instead.
 - `hooks/*.test.tsx`: the tests.
 
@@ -50,7 +53,9 @@ claude plugin validate .
 claude plugin test .
 ```
 
-Both must pass: validation reports "passed" or "passed with warnings", and every test passes. These need Claude Code 2.1.304 or later.
+Both must pass: validation reports "passed" or "passed with warnings", and every test passes. These need Claude Code 2.1.304 or later. Check `claude --version` first: an older `claude` on PATH fails validation with errors that are not about the mod (2.1.282 reports `"prompt.compose" is not an event`). The desktop app keeps newer builds in `~/.config/Claude/claude-code/<version>/*/claude`.
+
+Type-checking should also show no errors. `tsconfig.json` extends `.claude-plugin/types/tsconfig.json`, which the engine writes (with the API's declarations) only when it hot-reloads the mod from this folder, and which git ignores. Elsewhere, point a tsconfig with the same options at the plugin-authoring skill's `types/claude-code.d.ts` plus `hooks` and `types`, and run `tsc -p` on it.
 
 ## Tests
 
@@ -61,6 +66,7 @@ Both must pass: validation reports "passed" or "passed with warnings", and every
 - Pure functions can be imported and called directly in a test.
 - See `hooks/insight.test.tsx` and `hooks/engine.test.tsx` for full examples.
 - No network and no real `opencode run` in tests.
+- `session.start` pings the local models (`http://127.0.0.1:8009`, `:8010`). A test that counts `http.fetch` calls must answer or leave out those pings.
 
 ## Style
 
