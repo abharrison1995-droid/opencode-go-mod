@@ -153,7 +153,7 @@ test('a dependent batch task builds on its dependency branch', async ($, on) => 
   expect(adds.length).toBe(2)
   const second = adds.find(argv => (argv[argv.indexOf('-b') + 1] ?? '').endsWith('-b'))
   expect(second).toBeDefined()
-  const branchB = second![second!.indexOf('-b') + 1]
+  const branchB = second![second!.indexOf('-b') + 1]!
   const id = /^oc\/(.+)-b$/.exec(branchB)?.[1] ?? ''
   expect(id).not.toBe('')
   expect(second!.at(-1)).toBe(`oc/${id}-a`)

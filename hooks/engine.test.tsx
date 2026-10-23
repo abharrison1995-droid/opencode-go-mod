@@ -208,8 +208,8 @@ test('a rate-limited run resumes the same session', async ($, on) => {
   const ran = await drive(clock, $.tool.call(delegate({ prompt: 'work' }) as any))
   expect((ran as any).deny).toBeUndefined()
   expect(spawned.length).toBe(2)
-  expect(spawned[1].argv).toContain('--session')
-  expect(spawned[1].argv[spawned[1].argv.indexOf('--session') + 1]).toBe('ses_1')
+  expect(spawned[1]!.argv).toContain('--session')
+  expect(spawned[1]!.argv[spawned[1]!.argv.indexOf('--session') + 1]).toBe('ses_1')
   expect(String((ran as any).result)).toContain('attempts: 2')
   expect(String((ran as any).result)).toContain('answer:\ndone')
 })
@@ -265,8 +265,8 @@ test('verify failures resume the worker with its output until the check passes',
   const report = String((ran as any).result)
   expect(report).toContain('verify: passed')
   expect(spawned.length).toBe(2)
-  expect(spawned[1].argv.at(-1)).toContain('does not pass the check')
-  expect(spawned[1].argv.at(-1)).toContain('boom')
+  expect(spawned[1]!.argv.at(-1)).toContain('does not pass the check')
+  expect(spawned[1]!.argv.at(-1)).toContain('boom')
 })
 
 test('a batch task that keeps failing verify ends failed', { options: { autoRetries: 0 } }, async ($, on) => {
@@ -303,7 +303,7 @@ test('shared context is prefixed and files become -f arguments', async ($, on) =
       maxParallel: 1,
     }) as any,
   )
-  const argv = spawned[0].argv
+  const argv = spawned[0]!.argv
   expect(argv.at(-1)).toBe('COMMON CONTEXT\n\n# Your task\ndo A')
   expect(argv[argv.indexOf('-f') + 1]).toBe('/proj/src/a.ts')
   expect(argv.indexOf('-f')).toBeLessThan(argv.indexOf('--'))
@@ -386,6 +386,7 @@ test('cancel(job id) stops a running resume as cancelled', { options: { autoRetr
       cwd: '/proj',
       retries: 0,
       stallMs: 0,
+      verifyRounds: 0,
       signal,
     },
     () => undefined,
@@ -415,7 +416,7 @@ test('cancelling a batch cancels pending tasks and the batch', async ($, on) => 
   signal.addEventListener('abort', () => cancel('task:b1:a'))
 
   const call = runBatch(
-    $,
+    $ as any,
     { batch, maxParallel: 1, signal },
     async next => {
       taskSignal = track('task:b1:a')
@@ -457,8 +458,8 @@ test('resumeTask resumes a failed task in its folder and marks it done', { optio
   await resumeTask(fake.$ as any, 'b1', 'a')
   await until(() => toasts.some(text => text.includes('done on resume')))
   expect(spawned.length).toBe(1)
-  expect(spawned[0].argv[spawned[0].argv.indexOf('--session') + 1]).toBe('ses_1')
-  expect(spawned[0].cwd).toBe('/proj')
+  expect(spawned[0]!.argv[spawned[0]!.argv.indexOf('--session') + 1]).toBe('ses_1')
+  expect(spawned[0]!.cwd).toBe('/proj')
   const after = (fake.state.get('batches') as any[])[0]
   expect(after.tasks[0].status).toBe('done')
   expect(after.tasks[0].attempts).toBe(1)

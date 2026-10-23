@@ -43,7 +43,9 @@ async function rollback($: EngineInterface, dir: string, start: string) {
 // Brings the integration branch into a conflicting task's worktree and has the worker
 // resolve the conflict, so its branch then merges cleanly.
 export async function resolveConflict($: EngineInterface, o: ResolveOptions): Promise<ResolveResult> {
-  if (o.signal?.aborted === true) return { ok: false, cost: 0, model: o.model, note: 'cancelled' }
+  // A function, so later checks read the signal again rather than the first answer.
+  const aborted = () => o.signal?.aborted === true
+  if (aborted()) return { ok: false, cost: 0, model: o.model, note: 'cancelled' }
 
   const startOut = await git($, ['git', '-C', o.dir, 'rev-parse', 'HEAD'])
   const start = startOut.stdout.trim()
@@ -90,7 +92,7 @@ export async function resolveConflict($: EngineInterface, o: ResolveOptions): Pr
     cost = outcome.run.cost
     const model = outcome.model
 
-    if (o.signal?.aborted === true || outcome.reason === 'cancelled') {
+    if (aborted() || outcome.reason === 'cancelled') {
       await rollback($, o.dir, start)
       return { ok: false, cost, model, note: 'cancelled' }
     }
@@ -105,7 +107,7 @@ export async function resolveConflict($: EngineInterface, o: ResolveOptions): Pr
       return { ok: false, cost, model, note: 'conflict markers remain' }
     }
 
-    if (o.signal?.aborted === true) {
+    if (aborted()) {
       await rollback($, o.dir, start)
       return { ok: false, cost, model, note: 'cancelled' }
     }

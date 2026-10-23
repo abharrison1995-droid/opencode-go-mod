@@ -79,7 +79,7 @@ const settled = (store: Map<string, unknown>) =>
   until(() => Promise.resolve(((store.get('catalog') as any)?.models?.length ?? 0) > 1 ? true : undefined))
 
 const CACHED: WorkerModel[] = [
-  { id: 'opencode-go/cached-free', name: 'Cached Free', source: 'go', maker: 'Other', input: 0, output: 0, efforts: [], maxOutput: 32_000 },
+  { id: 'opencode-go/cached-free', name: 'Cached Free', source: 'go', maker: 'Other', input: 0, output: 0, efforts: [], maxOutput: 32_000, context: 128_000 },
 ]
 
 const storeWithCache = (model: string) =>

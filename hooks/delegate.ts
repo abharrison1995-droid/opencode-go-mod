@@ -292,7 +292,8 @@ export async function runResilient(
   let model = o.model
   let level = o.level
   let attempts = 0
-  let reason: EndReason = 'failed'
+  // Widened, so checks after the attempts see what they set.
+  let reason = 'failed' as EndReason
   let verify: VerifyResult | undefined
   let end: RunEnd = { code: null, signal: null }
   let stderr = ''
@@ -354,8 +355,10 @@ export async function runResilient(
   await retryRound(o.model, Math.max(0, o.firstRetries ?? o.retries), reason, o.level)
 
   if (reason !== 'ok' && reason !== 'cancelled' && o.fallbacks !== undefined && o.fallbacks.length > 0) {
+    // A function, so each rung reads what the last one's attempts set.
+    const settled = () => reason === 'ok' || reason === 'cancelled'
     for (const rung of o.fallbacks) {
-      if (reason === 'ok' || reason === 'cancelled') break
+      if (settled()) break
       const prompt = sessionId === undefined ? o.prompt : retryPrompt(reason)
       await attempt(prompt, rung.model, sessionId, 'fallback', rung.level)
       await retryRound(rung.model, Math.max(0, rung.retries ?? o.retries), reason, rung.level)

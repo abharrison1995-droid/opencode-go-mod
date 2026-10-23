@@ -160,7 +160,7 @@ test('report full returns the long form', async ($, on) => {
   expect(report).toContain('actions (')
   expect(report).toContain('answer:\ndone')
   expect(writes.length).toBe(2)
-  expect(writes[0].text).toContain('actions (')
+  expect(writes[0]!.text).toContain('actions (')
   expect(writes[1]).toEqual({ path: expect.stringMatching(/\.opencode\/reports\/\.gitignore$/), text: '*\n' })
 })
 
@@ -229,12 +229,12 @@ test('profile picks a preset model and level, and an explicit model wins', async
   await start($)
 
   await $.tool.call(delegate({ prompt: 'work', profile: 'reliable' }) as any)
-  const preset = spawned[0].argv
+  const preset = spawned[0]!.argv
   expect(preset[preset.indexOf('-m') + 1]).toBe('opencode-go/deepseek-v4.1-flash')
   expect(preset[preset.indexOf('--variant') + 1]).toBe('high')
 
   await $.tool.call(delegate({ prompt: 'work', profile: 'reliable', model: 'kimi-k3' }) as any)
-  const explicit = spawned[1].argv
+  const explicit = spawned[1]!.argv
   expect(explicit[explicit.indexOf('-m') + 1]).toBe('opencode-go/kimi-k3')
 })
 

@@ -102,9 +102,9 @@ test('a conflict is resolved by the worker, then added and committed', async () 
   expect(outcome.model).toBe('opencode-go/kimi-k3')
   expect(outcome.note).toBe('resolved by worker')
   expect(spawned).toHaveLength(1)
-  expect(spawned[0].cwd).toBe('/task')
-  expect(spawned[0].argv.at(-1)).toContain('src/a.ts')
-  expect(spawned[0].argv.at(-1)).toContain('src/b.ts')
+  expect(spawned[0]!.cwd).toBe('/task')
+  expect(spawned[0]!.argv.at(-1)).toContain('src/a.ts')
+  expect(spawned[0]!.argv.at(-1)).toContain('src/b.ts')
   expect(runs.some(argv => argv.includes('add') && argv.includes('-A'))).toBe(true)
   expect(
     runs.some(argv => argv.join(' ') === 'git -C /task -c user.name=OpenCode worker -c user.email=opencode-worker@localhost commit --no-edit'),
@@ -156,7 +156,7 @@ test('a fresh start includes the original prompt and no --session', async () => 
 
   const outcome = await resolveConflict($ as any, options())
   expect(outcome.ok).toBe(true)
-  const argv = spawned[0].argv
+  const argv = spawned[0]!.argv
   expect(argv).not.toContain('--session')
   const prompt = argv.at(-1) ?? ''
   expect(prompt).toContain('Your original task:')

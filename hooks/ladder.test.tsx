@@ -74,8 +74,8 @@ test('ladder puts good and unknown free models before the presets', () => {
   expect(rungs.map(r => r.model)).toEqual(['free-good', 'free-unknown', reliable.model, strong.model])
   expect(rungs[0]).toEqual({ model: 'free-good', effort: 'high', retries: 1 })
   expect(rungs[1]).toEqual({ model: 'free-unknown', effort: 'high', retries: 1 })
-  expect(rungs[2].retries).toBeUndefined()
-  expect(rungs[3].retries).toBeUndefined()
+  expect(rungs[2]!.retries).toBeUndefined()
+  expect(rungs[3]!.retries).toBeUndefined()
 })
 
 test('ladder keeps at most two free rungs, best first', () => {
@@ -120,7 +120,7 @@ test('a rate-limited free model climbs to the next rung and stops at the first o
 
   expect(outcome.reason).toBe('ok')
   expect(spawned.length).toBe(2)
-  const rung = spawned[1]
+  const rung = spawned[1]!
   expect(rung[rung.indexOf('-m') + 1]).toBe('opencode-go/beam-free')
   expect(rung[rung.indexOf('--variant') + 1]).toBe('high')
 })
@@ -148,7 +148,7 @@ test('firstRetries 1 limits the starting model to one retry', async () => {
   expect(outcome.reason).toBe('ok')
   expect(outcome.attempts).toBe(3)
   expect(spawned.length).toBe(3)
-  expect(spawned[0][spawned[0].indexOf('-m') + 1]).toBe('opencode-go/kimi-k3')
-  expect(spawned[1][spawned[1].indexOf('-m') + 1]).toBe('opencode-go/kimi-k3')
-  expect(spawned[2][spawned[2].indexOf('-m') + 1]).toBe('opencode-go/beam-free')
+  expect(spawned[0]![spawned[0]!.indexOf('-m') + 1]).toBe('opencode-go/kimi-k3')
+  expect(spawned[1]![spawned[1]!.indexOf('-m') + 1]).toBe('opencode-go/kimi-k3')
+  expect(spawned[2]![spawned[2]!.indexOf('-m') + 1]).toBe('opencode-go/beam-free')
 })

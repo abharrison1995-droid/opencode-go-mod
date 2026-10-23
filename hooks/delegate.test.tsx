@@ -74,12 +74,12 @@ test('delegate puts the working folder in cwd and a -- before the prompt', async
 
   const ran = await $.tool.call(delegate({ prompt: '-do it', dir: 'sub' }) as any)
   expect((ran as any).deny).toBeUndefined()
-  expect(spawned[0].cwd).toBe('/proj/sub')
-  expect(spawned[0].argv.slice(-2)).toEqual(['--', '-do it'])
-  expect(spawned[0].argv).not.toContain('--dir')
+  expect(spawned[0]!.cwd).toBe('/proj/sub')
+  expect(spawned[0]!.argv.slice(-2)).toEqual(['--', '-do it'])
+  expect(spawned[0]!.argv).not.toContain('--dir')
 
   await $.tool.call(delegate({ prompt: 'again', dir: '/abs/x/../y' }) as any)
-  expect(spawned[1].cwd).toBe('/abs/y')
+  expect(spawned[1]!.cwd).toBe('/abs/y')
 })
 
 test('workers get PWD set to their folder, so opencode does not use the host folder', async ($, on) => {
@@ -88,15 +88,15 @@ test('workers get PWD set to their folder, so opencode does not use the host fol
   await start($, '/proj')
 
   await $.tool.call(delegate({ prompt: 'here' }) as any)
-  expect(spawned[0].cwd).toBe('/proj')
-  expect(spawned[0].env).toEqual({ PWD: '/proj' })
+  expect(spawned[0]!.cwd).toBe('/proj')
+  expect(spawned[0]!.env).toEqual({ PWD: '/proj' })
 
   await $.tool.call(delegate({ prompt: 'there', dir: 'sub' }) as any)
-  expect(spawned[1].env).toEqual({ PWD: '/proj/sub' })
+  expect(spawned[1]!.env).toEqual({ PWD: '/proj/sub' })
 
   const ran = await $.tool.call(batch({ title: 'b', isolation: 'none', tasks: [{ id: 'a', prompt: 'x' }] }) as any)
   expect((ran as any).deny).toBeUndefined()
-  expect(spawned[2].env).toEqual({ PWD: '/proj' })
+  expect(spawned[2]!.env).toEqual({ PWD: '/proj' })
 })
 
 test('readOnly runs opencode plan agent', async ($, on) => {
@@ -105,7 +105,7 @@ test('readOnly runs opencode plan agent', async ($, on) => {
   await start($, '/proj')
 
   await $.tool.call(delegate({ prompt: 'review it', readOnly: true }) as any)
-  const argv = spawned[0].argv
+  const argv = spawned[0]!.argv
   expect(argv[argv.indexOf('--agent') + 1]).toBe('plan')
   expect(argv.at(-2)).toBe('--')
 })
@@ -293,10 +293,10 @@ test('worktree isolation creates a sibling worktree and runs there', async ($, o
   await $.tool.call(batch({ title: 'wt', tasks: [{ id: 'a', prompt: 'A' }], isolation: 'worktree' }) as any)
   const add = runs.find(r => r.argv.includes('worktree') && r.argv.includes('add'))
   expect(add).toBeDefined()
-  const branch = add!.argv[add!.argv.indexOf('-b') + 1]
+  const branch = add!.argv[add!.argv.indexOf('-b') + 1]!
   const id = /^oc\/(.+)-a$/.exec(branch)![1]
   expect(add!.argv).toEqual(['git', '-C', '/repo', 'worktree', 'add', '-b', `oc/${id}-a`, `/repo-opencode/${id}-a`, 'HEAD'])
-  expect(spawned[0].cwd).toBe(`/repo-opencode/${id}-a`)
+  expect(spawned[0]!.cwd).toBe(`/repo-opencode/${id}-a`)
 })
 
 test('a background batch returns at once and submits its report later', async ($, on) => {

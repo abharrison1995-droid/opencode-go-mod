@@ -163,7 +163,7 @@ async function refresh($: EngineInterface) {
     await update($, catalog, () => ({ status: 'loading', models: cached }))
     await registerTool($, cached)
   } else {
-    await update($, catalog, c => ({ ...c, status: 'loading' }))
+    await update($, catalog, c => ({ ...c, status: 'loading' as const }))
   }
   const loaded = await loadCatalog($)
   if (loaded.status === 'ready') {
@@ -173,7 +173,7 @@ async function refresh($: EngineInterface) {
     return
   }
   const models = cached ?? previous.models
-  await update($, catalog, () => ({ status: 'error', models, error: loaded.error }))
+  await update($, catalog, () => ({ status: 'error' as const, models, error: loaded.error }))
   if (models.length > 0) await registerTool($, models)
 }
 
@@ -383,10 +383,10 @@ async function showStatus($: EngineInterface) {
     ...running.map(j => ({ model: j.model, steps: j.steps, last: j.last, attempt: j.attempt })),
     ...tasks.map(t => ({ model: t.model, steps: t.steps, last: t.last, attempt: t.attempts })),
   ]
+  const one = all.length === 1 ? all[0] : undefined
   if (all.length === 0) {
     $.ui.status(undefined)
-  } else if (all.length === 1) {
-    const one = all[0]
+  } else if (one !== undefined) {
     const short = one.model.split('/')[1] ?? one.model
     $.ui.status(`opencode ${short}: ${one.steps} steps${retry(one.attempt)}${one.last ? ` · ${one.last.slice(0, 50)}` : ''}`)
   } else {

@@ -85,34 +85,34 @@ test('every check passes', async () => {
 
   expect(checks.map(c => c.name)).toEqual(names)
   expect(checks.every(c => c.ok)).toBe(true)
-  expect(fake.runs[0].argv).toEqual(['/usr/bin/opencode', '--version'])
-  expect(fake.runs[0].init.timeoutMs).toBe(15000)
-  expect(fake.runs[1].argv).toEqual(['git', '--version'])
+  expect(fake.runs[0]!.argv).toEqual(['/usr/bin/opencode', '--version'])
+  expect(fake.runs[0]!.init.timeoutMs).toBe(15000)
+  expect(fake.runs[1]!.argv).toEqual(['git', '--version'])
   expect(fake.notified).toEqual(['OpenCode self-test: notifications work'])
   expect(fake.writes.map(w => w.path)).toEqual(['/proj/.opencode/reports/selftest.md', '/proj/.opencode/reports/.gitignore'])
-  expect(fake.writes[1].text).toBe('*\n')
-  expect(fake.writes[0].text).toContain('6/6 checks passed')
+  expect(fake.writes[1]!.text).toBe('*\n')
+  expect(fake.writes[0]!.text).toContain('6/6 checks passed')
 })
 
 test('a missing opencode CLI fails its check without running the binary', async () => {
   const fake = fakeEngine({ spawn: ended })
   const checks = await selfTest(fake.$, { bin: undefined, dir: '/proj' })
 
-  expect(checks[0].name).toBe('opencode CLI')
-  expect(checks[0].ok).toBe(false)
-  expect(checks[0].detail).toBe('not found on PATH')
+  expect(checks[0]!.name).toBe('opencode CLI')
+  expect(checks[0]!.ok).toBe(false)
+  expect(checks[0]!.detail).toBe('not found on PATH')
   expect(fake.runs.some(r => r.argv[0] === '/usr/bin/opencode')).toBe(false)
-  expect(checks[1].ok).toBe(true)
+  expect(checks[1]!.ok).toBe(true)
 })
 
 test('the hang check fails when the spawn ends at once with code 0', async () => {
   const fake = fakeEngine({ spawn: ended })
   const checks = await selfTest(fake.$, { bin: '/usr/bin/opencode', dir: '/proj' })
 
-  expect(checks[2].name).toBe('hang watchdog')
-  expect(checks[2].ok).toBe(false)
-  expect(checks[2].detail).toContain('ok')
-  expect(checks[2].detail).toMatch(/\d+\.\d+s$/)
+  expect(checks[2]!.name).toBe('hang watchdog')
+  expect(checks[2]!.ok).toBe(false)
+  expect(checks[2]!.detail).toContain('ok')
+  expect(checks[2]!.detail).toMatch(/\d+\.\d+s$/)
 })
 
 test('a rejected notification is a failed check, not a throw', async () => {
@@ -120,25 +120,25 @@ test('a rejected notification is a failed check, not a throw', async () => {
   const checks = await selfTest(fake.$, { bin: '/usr/bin/opencode', dir: '/proj' })
 
   expect(checks.length).toBe(7)
-  expect(checks[5].name).toBe('notification')
-  expect(checks[5].ok).toBe(false)
-  expect(checks[5].detail).toContain('no surface')
+  expect(checks[5]!.name).toBe('notification')
+  expect(checks[5]!.ok).toBe(false)
+  expect(checks[5]!.detail).toContain('no surface')
 })
 
 test('no terminal to notify (desktop, phone) passes with a note', async () => {
   const fake = fakeEngine({ notify: async () => ({ isSent: false, reason: 'no-surface' }) })
   const checks = await selfTest(fake.$, { bin: '/usr/bin/opencode', dir: '/proj' })
 
-  expect(checks[5].ok).toBe(true)
-  expect(checks[5].detail).toContain('only a terminal')
+  expect(checks[5]!.ok).toBe(true)
+  expect(checks[5]!.detail).toContain('only a terminal')
 })
 
 test('notifications turned off is a failed check', async () => {
   const fake = fakeEngine({ notify: async () => ({ isSent: false, reason: 'disabled' }) })
   const checks = await selfTest(fake.$, { bin: '/usr/bin/opencode', dir: '/proj' })
 
-  expect(checks[5].ok).toBe(false)
-  expect(checks[5].detail).toContain('not delivered (disabled)')
+  expect(checks[5]!.ok).toBe(false)
+  expect(checks[5]!.detail).toContain('not delivered (disabled)')
 })
 
 test('formatChecks ends with the pass summary', () => {

@@ -170,6 +170,9 @@ export function batchReport(batch: Batch, extras: ReportExtras = {}): string {
   const total = batch.tasks.reduce((sum, t) => sum + t.cost, 0)
   const lines = [`# ${batch.title}`, `${finished}/${batch.tasks.length} done · $${total.toFixed(4)}`]
   for (const task of batch.tasks) {
+    const review = extras.reviews?.[task.id]
+    const diff = extras.diffs?.[task.id]?.trim()
+    const answer = extras.answers?.[task.id]
     lines.push(
       [
         `## ${task.id} · ${task.title} · ${task.status}`,
@@ -178,14 +181,14 @@ export function batchReport(batch: Batch, extras: ReportExtras = {}): string {
         extras.warnings?.[task.id] ? `warning: ${extras.warnings[task.id]}` : undefined,
         `cost: $${task.cost.toFixed(4)}`,
         task.verify ? `verify: ${task.verify}` : undefined,
-        extras.reviews?.[task.id] ? `review: ${extras.reviews[task.id].verdict}\n${extras.reviews[task.id].notes}` : undefined,
+        review ? `review: ${review.verdict}\n${review.notes}` : undefined,
         task.sessionId ? `sessionId: ${task.sessionId}` : undefined,
         task.dir ? `dir: ${task.dir}` : undefined,
         task.branch ? `branch: ${task.branch}` : undefined,
-        extras.diffs?.[task.id]?.trim() ? `diff:\n${extras.diffs[task.id].trim()}` : undefined,
+        diff ? `diff:\n${diff}` : undefined,
         task.steps ? `actions (${task.steps}): ${task.last ?? ''}`.trimEnd() : undefined,
         task.error ? `error: ${task.error}` : undefined,
-        extras.answers?.[task.id] !== undefined ? `answer:\n${extras.answers[task.id].slice(0, 3000)}` : undefined,
+        answer !== undefined ? `answer:\n${answer.slice(0, 3000)}` : undefined,
       ]
         .filter(Boolean)
         .join('\n'),

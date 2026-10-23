@@ -86,7 +86,7 @@ export async function reviewTask($: EngineInterface, o: ReviewOptions): Promise<
   const lineEnd = answer.indexOf('\n', match.index)
   const notes = (lineEnd === -1 ? '' : answer.slice(lineEnd + 1)).trim().slice(0, NOTES_CAP)
   return {
-    verdict: match[1].toLowerCase() === 'ok' ? 'ok' : 'concerns',
+    verdict: match[1]?.toLowerCase() === 'ok' ? 'ok' : 'concerns',
     notes,
     cost: outcome.run.cost,
     model: outcome.model,

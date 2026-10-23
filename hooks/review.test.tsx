@@ -112,7 +112,7 @@ test('an answer without a verdict line is an error', async () => {
 test('the worker runs read-only with the task prompt and the diff', async () => {
   const { $, spawned } = fakeEngine({ spawn: () => reply('VERDICT: OK\n') })
   await reviewTask($, options())
-  const call = spawned[0]
+  const call = spawned[0]!
   expect(call.cwd).toBe('/proj/worktree')
   expect(call.argv[call.argv.indexOf('--agent') + 1]).toBe('plan')
   const prompt = call.argv.at(-1) ?? ''
@@ -123,7 +123,7 @@ test('the worker runs read-only with the task prompt and the diff', async () => 
 test('a long diff is cut at 40000 characters', async () => {
   const { $, spawned } = fakeEngine({ stat: '', diff: 'x'.repeat(45_000), spawn: () => reply('VERDICT: OK\n') })
   await reviewTask($, options())
-  const prompt = spawned[0].argv.at(-1) ?? ''
+  const prompt = spawned[0]!.argv.at(-1) ?? ''
   expect(prompt).toContain('x'.repeat(40_000))
   expect(prompt).toContain('cut')
   expect(prompt).not.toContain('x'.repeat(40_001))
