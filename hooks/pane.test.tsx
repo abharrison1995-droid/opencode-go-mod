@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 
 import { engine, MODELS, PANE, ready, RUN } from './testkit'
 
-type Spawn = (e: any) => AsyncGenerator<any, any>
+type Spawn = (_: any, e: any) => AsyncGenerator<any, any>
 
 // testkit's engine, with a spawn the test scripts per task.
 function stand(on: any, store: Map<string, unknown>, spawn: Spawn) {

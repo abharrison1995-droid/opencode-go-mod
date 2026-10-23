@@ -3,8 +3,11 @@ import { expect, test } from 'claude-code/testing'
 import { cancel, track, untrack } from './control'
 import { MODELS, PANE, ready, RUN } from './testkit'
 
+// command.run's input now carries where the run came from and where it shows; the engine stamps both for an Enter.
+const opencode = (args: string) => ({ command: 'opencode', args, origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } })
+
 type RunResult = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: boolean; isStderrTruncated: boolean }
-type Spawn = (e: any) => AsyncGenerator<any, any>
+type Spawn = (_: any, e: any) => AsyncGenerator<any, any>
 
 const result = (exitCode = 0, stdout = '', stderr = ''): RunResult => ({
   exitCode,
@@ -122,7 +125,7 @@ test('presets apply from the panel and from /opencode preset', async ($, on) => 
   expect(store.get('effort')).toBe('high')
   await ui.unmount()
 
-  const out = await $.command.run({ command: 'opencode', args: 'preset strong' })
+  const out = await $.command.run(opencode('preset strong'))
   expect(out.text).toBe('Preset strong: opencode-go/kimi-k3 · high')
   expect(store.get('model')).toBe('opencode-go/kimi-k3')
   expect(store.get('effort')).toBe('high')
@@ -284,7 +287,7 @@ test('cancel stops a running batch by its id', async ($, on) => {
   // The plugin loads its own copy of control.ts, so a controller made here is not visible
   // to it. A running batch in the atom takes the batch branch, which calls
   // cancel('batch:<id>') and answers the cancellation; the registry itself is tested below.
-  const out = await $.command.run({ command: 'opencode', args: `cancel ${id}` })
+  const out = await $.command.run(opencode(`cancel ${id}`))
   expect(out.text).toBe(`Cancelling batch ${id}.`)
 
   release()
@@ -314,7 +317,7 @@ test('/opencode history lists stored runs and spend, and HISTORY unfolds', async
   setup(on, store)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
 
-  const out = await $.command.run({ command: 'opencode', args: 'history' })
+  const out = await $.command.run(opencode('history'))
   expect(out.text).toContain('Old run · done · 2/2 · $0.1234 · 5m ago')
   expect(out.text).toContain('kimi-k3 $1.23')
 
@@ -335,7 +338,7 @@ test('/opencode batches lists a batch and its tasks', async ($, on) => {
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   await ready(ui)
-  const out = await $.command.run({ command: 'opencode', args: 'batches' })
+  const out = await $.command.run(opencode('batches'))
   expect(out.text).toContain(`${id} · Build it · done · 1/1 · $0.0000`)
   expect(out.text).toContain('  ● a done')
   await ui.unmount()

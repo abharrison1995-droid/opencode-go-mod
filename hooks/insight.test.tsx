@@ -2,6 +2,9 @@ import { expect, mock, test } from 'claude-code/testing'
 
 import { MODELS, PANE, ready, RUN } from './testkit'
 
+// command.run's input now carries where the run came from and where it shows; the engine stamps both for an Enter.
+const opencode = (args: string) => ({ command: 'opencode', args, origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } })
+
 type RunResult = { exitCode: number; stdout: string; stderr: string; isStdoutTruncated: boolean; isStderrTruncated: boolean }
 type SpawnCall = { argv: string[]; cwd?: string }
 
@@ -179,7 +182,7 @@ test('health records rate limits and successes, and a cancelled run changes noth
   const before = JSON.stringify(store.get('health'))
   const running = $.tool.call(delegate({ prompt: 'slow' }) as any)
   await until(() => spawned.length >= 3)
-  await $.command.run({ command: 'opencode', args: 'cancel all' })
+  await $.command.run(opencode('cancel all'))
   const stopped = await running
   expect(String((stopped as any).deny)).toContain('cancelled')
   expect(JSON.stringify(store.get('health'))).toBe(before)

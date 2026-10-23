@@ -4,6 +4,9 @@ import type { WorkerModel } from '../types'
 import { abortable, explainError } from './chat'
 import { MODELS, PANE, REPLY, step } from './testkit'
 
+// command.run's input now carries where the run came from and where it shows; the engine stamps both for an Enter.
+const opencode = (args: string) => ({ command: 'opencode', args, origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } })
+
 type Options = {
   store?: Map<string, unknown>
   fetched?: any[]
@@ -40,7 +43,11 @@ function setup(on: any, opts: Options = {}) {
     ],
   }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'You are Claude Code.', scope: 'shared' }] }))
-  on('http.fetch', (_: any, e: any) => (fetched.push(e), { value: reply() }))
+  on('http.fetch', (_: any, e: any) => {
+    // The local decision models' health pings; none is running here.
+    if (e.url.startsWith('http://127.0.0.1:')) return { value: response(503, false, {}) }
+    return (fetched.push(e), { value: reply() })
+  })
   on('process.run', async (_: any, e: any) => {
     if (!e.argv.includes('models')) return { value: listed('/usr/bin/opencode\n') }
     if (opts.modelsDelay) await opts.modelsDelay
@@ -116,7 +123,7 @@ test('chat mode explains a rejected key', async ($, on) => {
   const { store } = setup(on, { fetched, reply: () => response(401, false, { type: 'error', error: { type: 'authentication_error', message: 'bad key' } }) })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await settled(store)
-  await $.command.run({ command: 'opencode', args: 'chat on' })
+  await $.command.run(opencode('chat on'))
 
   const { result } = await step($)
   expect(fetched.length).toBe(1)
@@ -136,7 +143,7 @@ test('a 503 is retried once and then answered', async ($, on) => {
   })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await settled(store)
-  await $.command.run({ command: 'opencode', args: 'chat on' })
+  await $.command.run(opencode('chat on'))
 
   const running = step($)
   for (let i = 0; i < 20 && fetched.length < 2; i++) {
@@ -152,7 +159,7 @@ test('chat mode tells the user when there is no key', async ($, on) => {
   const { store } = setup(on, { auth: undefined })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await settled(store)
-  await $.command.run({ command: 'opencode', args: 'chat on' })
+  await $.command.run(opencode('chat on'))
 
   const { result } = await step($)
   expect(result.answer).toContain('no OpenCode key')
@@ -163,8 +170,8 @@ test('chat mode refuses a Zen model at the turn', async ($, on) => {
   const { store } = setup(on, { fetched })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await settled(store)
-  await $.command.run({ command: 'opencode', args: 'model deepseek' })
-  const refused = await $.command.run({ command: 'opencode', args: 'chat on' })
+  await $.command.run(opencode('model deepseek'))
+  const refused = await $.command.run(opencode('chat on'))
   expect(refused.text).toContain('Zen model')
 
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
@@ -182,24 +189,24 @@ test('subcommands pick models, efforts and groups', async ($, on) => {
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await settled(store)
 
-  const glm = await $.command.run({ command: 'opencode', args: 'model glm' })
+  const glm = await $.command.run(opencode('model glm'))
   expect(glm.text).toContain('Worker: GLM 5.3 Flash')
   expect(store.get('model')).toBe('opencode-go/glm-5.3-flash')
 
-  const several = await $.command.run({ command: 'opencode', args: 'model kimi' })
+  const several = await $.command.run(opencode('model kimi'))
   expect(several.text).toContain('Several match')
 
-  const max = await $.command.run({ command: 'opencode', args: 'effort max' })
+  const max = await $.command.run(opencode('effort max'))
   expect(max.text).toContain('Reasoning: max')
   expect(store.get('effort')).toBe('max')
 
-  const huge = await $.command.run({ command: 'opencode', args: 'effort huge' })
+  const huge = await $.command.run(opencode('effort huge'))
   expect(huge.text).toContain('low, medium, high, xhigh, max')
 
-  const paid = await $.command.run({ command: 'opencode', args: 'models paid' })
+  const paid = await $.command.run(opencode('models paid'))
   expect(paid.text).toContain('opencode-go/kimi-k3')
 
-  const status = await $.command.run({ command: 'opencode', args: 'status' })
+  const status = await $.command.run(opencode('status'))
   expect(status.text).toContain('this chat')
 })
 
@@ -207,7 +214,7 @@ test('an unknown subcommand lists the commands', async ($, on) => {
   const { store } = setup(on)
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await settled(store)
-  const out = await $.command.run({ command: 'opencode', args: 'wat' })
+  const out = await $.command.run(opencode('wat'))
   expect(out.text).toContain('Unknown subcommand.')
   expect(out.text).toContain('/opencode effort <level>')
 })

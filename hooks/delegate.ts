@@ -167,7 +167,7 @@ export async function runOpencode(
     if (o.signal?.aborted === true) {
       cancelled = true
       try {
-        void stream.return?.(undefined)?.catch?.(() => undefined)
+        void stream.return?.(end)?.catch?.(() => undefined)
       } catch {
         // Leaving the loop is what kills the child.
       }
@@ -210,7 +210,7 @@ export async function runOpencode(
     if (first.kind === 'wake') {
       void pulled.catch(() => undefined)
       try {
-        void stream.return?.(undefined)?.catch?.(() => undefined)
+        void stream.return?.(end)?.catch?.(() => undefined)
       } catch {
         // Leaving the loop is what kills the child; a stream that cannot close is left to it.
       }

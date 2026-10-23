@@ -324,6 +324,12 @@ async function setLocal($: EngineInterface, name: LocalName, patch: Partial<Loca
   await update($, local, all => ({ ...all, [name]: { ...(all[name] ?? { status: 'off' }), ...patch } }))
 }
 
+// `cache` holds the folder once found, so HOME is read only the first time.
+async function localOpts($: EngineInterface, options: Parameters<Register>[1], cache: { dir: string }): Promise<LocalOptions> {
+  if (cache.dir === '') cache.dir = `${await homeDir($)}/local-models`
+  return { dir: cache.dir, kevRun: String(options.kevModel ?? '') || 'jaredpalmer/kev-0.8b', device: String(options.localDevice ?? '') || 'auto', layaDevice: String(options.layaDevice ?? '') || 'cpu', kevGpuGb: Number(options.kevGpuGb ?? 0) || 0, root: $.plugin.root }
+}
+
 async function bringUp($: EngineInterface, spec: LocalSpec, opts: LocalOptions) {
   return startLocal($, spec, opts, patch => setLocal($, spec.name, patch))
 }
@@ -631,11 +637,7 @@ async function autoMerge(
 
 export const register: Register = (on, options) => {
   const defaultModel = fullId(String(options.defaultModel ?? 'opencode-go/kimi-k3'))
-  let localDir = String(options.localModelsDir ?? '').trim()
-  const localOpts = async ($: EngineInterface): Promise<LocalOptions> => {
-    if (localDir === '') localDir = `${await homeDir($)}/local-models`
-    return { dir: localDir, kevRun: String(options.kevModel ?? '') || 'jaredpalmer/kev-0.8b', device: String(options.localDevice ?? '') || 'auto', layaDevice: String(options.layaDevice ?? '') || 'cpu', kevGpuGb: Number(options.kevGpuGb ?? 0) || 0, root: $.plugin.root }
-  }
+  const localDir = { dir: String(options.localModelsDir ?? '').trim() }
 
   on('session.start', async ($, e, next) => {
     const started = await next(e)
@@ -764,7 +766,7 @@ export const register: Register = (on, options) => {
       const specs = which === 'all' ? LOCAL : [localNamed(which)].filter((x): x is LocalSpec => x !== undefined)
       if (specs.length === 0) return { text: `No local model "${which}". Try kev or laya.` }
       if (verb === 'start') {
-        const opts = await localOpts($)
+        const opts = await localOpts($, options, localDir)
         for (const spec of specs) void bringUp($, spec, opts)
         return { text: `Starting ${specs.map(x => x.label).join(' and ')}; the panel shows when ${specs.length > 1 ? 'they are' : 'it is'} ready.` }
       }
@@ -972,7 +974,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const bad = checkQuestions(input.questions)
     if (bad) return { deny: `decide: ${bad}` }
     const specs = input.model === 'both' ? LOCAL : LOCAL.filter(x => x.name === (localNamed(input.model ?? '')?.name ?? 'kev'))
-    const opts = await localOpts($)
+    const opts = await localOpts($, options, localDir)
     // One model after the other, never both at once: they share the machine's GPU and RAM.
     const parts: string[] = []
     for (const spec of specs) parts.push(await askOne($, spec, opts, input.state, input.questions, input.raw === true))
@@ -1717,7 +1719,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
                   <Text color={color}>● </Text>
                   <Text bold>{spec.label}</Text>
                   <Text dimColor>{srv.status}{srv.calls ? ` · ${srv.calls} calls · ${Math.round(srv.lastMs ?? 0)} ms` : ''}</Text>
-                  {!busy && <Button key={`local-start:${spec.name}`} plain label="Start" onPress={() => void localOpts($).then(o => bringUp($, spec, o))} />}
+                  {!busy && <Button key={`local-start:${spec.name}`} plain label="Start" onPress={() => void localOpts($, options, localDir).then(o => bringUp($, spec, o))} />}
                   {busy && ownsLocal(spec.name) && (
                     <Button key={`local-stop:${spec.name}`} plain label="Stop" onPress={() => void stopLocal(spec.name).then(() => setLocal($, spec.name, { status: 'off', error: undefined }))} />
                   )}
