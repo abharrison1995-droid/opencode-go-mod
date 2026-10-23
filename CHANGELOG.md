@@ -10,6 +10,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - `kevGpuGb` splits Kev between the GPU and system RAM (`scripts/kev_split.py`, using accelerate), so Kev-4B runs on an 8 GB card.
 - MIT license.
+- Tests for the local servers and `decide`: start, reuse, crash and timeout, one start at a time, Stop, `askLocal` errors, `/opencode local`, and the LOCAL panel.
 
 ### Changed
 
