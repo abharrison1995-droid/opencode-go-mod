@@ -45,6 +45,8 @@ export const LOCAL: LocalSpec[] = [
   },
 ]
 
+export const notInstalled = (s: LocalSpec, bin: string) => `${s.label} is not installed (${bin} is missing). Run /opencode local setup for the install command.`
+
 export const localNamed = (name: string) => LOCAL.find(s => s.name === name.toLowerCase())
 
 const url = (s: LocalSpec, path: string) => `http://127.0.0.1:${s.port}${path}`
@@ -98,6 +100,12 @@ async function launch(
     return { ok: true }
   }
   if (!children.has(s.name)) {
+    const bin = s.argv(opts.dir, opts)[0] ?? ''
+    if ((await $.fs.stat(bin).catch(() => undefined)) === undefined) {
+      const error = notInstalled(s, bin)
+      await set({ status: 'error', error })
+      return { ok: false, error }
+    }
     const stream = $.process.spawn({ argv: s.argv(opts.dir, opts), cwd: `${opts.dir}/${s.folder}`, env: s.env(opts) })
     children.set(s.name, stream)
     await set({ status: 'starting', error: undefined, startedAt: Date.now() })

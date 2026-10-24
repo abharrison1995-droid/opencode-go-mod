@@ -48,6 +48,7 @@ function setup(on: any, o: Options = {}) {
       isStderrTruncated: false,
     },
   }))
+  on('fs.stat', () => ({ value: { kind: 'file', size: 1, mtimeMs: 0, isLink: false } }))
   on('process.spawn', async function* (_: any, e: any) {
     spawned.push(e)
     // The server comes up once spawned, and runs until the stream is closed. It idles in short

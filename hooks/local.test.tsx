@@ -76,7 +76,7 @@ function child(lines: string[] = []): Child {
   return it
 }
 
-function fake(o: { up?: Set<number>; children?: Child[]; reply?: (url: string, init: any) => any } = {}) {
+function fake(o: { up?: Set<number>; children?: Child[]; reply?: (url: string, init: any) => any; missing?: boolean } = {}) {
   const up = o.up ?? new Set<number>()
   const spawned: any[] = []
   const fetched: { url: string; init?: any }[] = []
@@ -98,6 +98,7 @@ function fake(o: { up?: Set<number>; children?: Child[]; reply?: (url: string, i
       },
     },
     clock: { sleep: () => new Promise(r => setTimeout(r, 1)) },
+    fs: { stat: async () => (o.missing ? Promise.reject(new Error('ENOENT')) : { kind: 'file', size: 1, mtimeMs: 0, isLink: false }) },
   }
   const set = async (s: any) => void states.push(s)
   return { $, up, spawned, fetched, states, set }
@@ -129,6 +130,15 @@ test('startLocal spawns the server in its folder and waits for it to answer', as
   expect(await stopLocal('laya')).toBe(true)
   expect(c.closed()).toBe(true)
   expect(ownsLocal('laya')).toBe(false)
+})
+
+test('a model that is not installed is reported without spawning', async () => {
+  const f = fake({ missing: true })
+  const result = await startLocal(f.$, laya(), opts(0), f.set)
+  expect(result.ok).toBe(false)
+  expect((result as { error: string }).error).toContain('/m/laya-env/bin/laya-serve is missing')
+  expect(f.spawned.length).toBe(0)
+  expect(f.states.map(s => s.status)).toEqual(['error'])
 })
 
 test('a server that exits while starting reports its last lines', async () => {

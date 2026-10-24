@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
+import { setupText } from './commands'
 import { colorOf, costsMoney, isFree, isPlan, MAKER_COLORS, parseModels, worker } from './catalog'
 
 test('colorOf is blue for a DeepSeek id', async () => {
@@ -49,4 +50,9 @@ test('a Z.AI Coding Plan model is not free and costs no money', async () => {
   expect(costsMoney(glm!)).toBe(false)
   expect(costsMoney(kimi!)).toBe(true)
   expect(costsMoney(pickle!)).toBe(false)
+})
+
+test('setupText gives the install command for the models folder', async () => {
+  expect(setupText('/mod', '/home/a/local-models')).toContain('/mod/scripts/setup-local.sh --dir /home/a/local-models')
+  expect(setupText('/mod', '/m', 'kev')).toContain('--dir /m --only kev')
 })

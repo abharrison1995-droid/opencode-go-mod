@@ -55,7 +55,7 @@ export function zaiCheck(models: WorkerModel[]): Check {
 async function localCheck($: EngineInterface, spec: LocalSpec, opts: LocalOptions): Promise<Check> {
   const bin = spec.argv(opts.dir, opts)[0] ?? ''
   if ((await $.fs.stat(bin).catch(() => undefined)) === undefined) {
-    return { name: spec.label, ok: true, skipped: true, detail: `not installed (${bin} missing): run scripts/setup-local.sh` }
+    return { name: spec.label, ok: true, skipped: true, detail: `not installed (${bin} missing): run /opencode local setup` }
   }
   return (await ping($, spec))
     ? { name: spec.label, ok: true, detail: `running on :${spec.port}` }

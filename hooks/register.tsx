@@ -5,7 +5,7 @@ import type { Batch, BatchSummary, PlanUse, BatchTask, Catalog, DecideInput, Del
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
 import { costsMoney, findOpencode, fullId, isFree, isPlan, loadCatalog, price, readCache, worker, writeCache } from './catalog'
-import { batchesText, diffText, effortText, HELP, historyText, localText, matchJob, matchModel, modelsText, parseArgs, presetsText, statusText } from './commands'
+import { batchesText, diffText, effortText, HELP, historyText, localText, setupText, matchJob, matchModel, modelsText, parseArgs, presetsText, statusText } from './commands'
 import { chatTools, explainError, readKey, requestBody, sendWithRetry, toMessages } from './chat'
 import { cancel, track, tracked, untrack } from './control'
 import { attachedChars, budgetMessage, contextVerdict, contextWarning, dailySpent, formatReport, localDate, notify, overContext, resolveDir, runResilient } from './delegate'
@@ -351,7 +351,7 @@ async function refreshLocal($: EngineInterface) {
 
 async function askOne($: EngineInterface, spec: LocalSpec, opts: LocalOptions, state: unknown, questions: unknown, raw: boolean) {
   const up = await bringUp($, spec, opts)
-  if (!up.ok) return `${spec.label}: could not start. ${up.error}\nIs it installed in ${opts.dir}? (/opencode local status)`
+  if (!up.ok) return `${spec.label}: could not start. ${up.error}${up.error.includes('not installed') ? '' : `\nIs it installed in ${opts.dir}? (/opencode local status)`}`
   const t0 = Date.now()
   const got = await askLocal($, spec, state, questions)
   if ('error' in got) return `${spec.label}: ${got.error}`
@@ -693,6 +693,10 @@ export const register: Register = (on, options) => {
 
     if (sub === 'local') {
       const [verb = 'status', which = 'all'] = rest.toLowerCase().split(/\s+/).filter(Boolean)
+      if (verb === 'setup') {
+        const opts = await localOpts($, options, localDir)
+        return { text: setupText($.plugin.root, opts.dir, which === 'all' ? undefined : which) }
+      }
       const specs = which === 'all' ? LOCAL : [localNamed(which)].filter((x): x is LocalSpec => x !== undefined)
       if (specs.length === 0) return { text: `No local model "${which}". Try kev or laya.` }
       if (verb === 'start') {

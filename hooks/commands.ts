@@ -21,7 +21,7 @@ export const HELP = [
   '  /opencode resume <batch> <task> continue a failed or cancelled task',
   '  /opencode history              recent batches and spend by model',
   '  /opencode status               what is running and what it cost',
-  '  /opencode local [start|stop] [kev|laya]  local decision models',
+  '  /opencode local [start|stop|setup] [kev|laya]  local decision models',
   '  /opencode selftest             check opencode, model sources, local models, hangs, rate limits and notifications',
   '  /opencode help                 this list',
 ].join('\n')
@@ -63,6 +63,18 @@ export function modelsText(free: WorkerModel[], paid: WorkerModel[], plan: Worke
   if (rest === '' || rest === 'paid') sections.push(['PAID', paid])
   if (rest === '' || rest === 'zai') sections.push(['Z.AI PLAN', plan])
   return sections.map(([title, list]) => `${title}\n${list.length ? list.map(line).join('\n') : '(none)'}`).join('\n\n')
+}
+
+// Installing Kev and Laya takes minutes and gigabytes, so the mod gives the command rather than running it.
+export function setupText(root: string, dir: string, only?: string) {
+  const args = [`--dir ${dir}`, ...(only === 'kev' || only === 'laya' ? [`--only ${only}`] : [])].join(' ')
+  return [
+    `To install ${only === 'kev' ? 'Kev' : only === 'laya' ? 'Laya' : 'Kev and Laya'} into ${dir}, run in a terminal (needs git and uv):`,
+    '',
+    `  ${root}/scripts/setup-local.sh ${args}`,
+    '',
+    'Add --dry-run to see the steps first. Then start them from the panel or with /opencode local start.',
+  ].join('\n')
 }
 
 export function localText(specs: LocalSpec[], all: Record<string, LocalServer>) {
