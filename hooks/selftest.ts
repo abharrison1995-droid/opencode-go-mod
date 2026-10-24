@@ -1,8 +1,12 @@
 import type { EngineInterface } from 'claude-code'
 
+import type { WorkerModel } from '../types'
 import { runOpencode } from './delegate'
+import { LOCAL, ping } from './local'
+import type { LocalOptions, LocalSpec } from './local'
 
-export type Check = { name: string; ok: boolean; detail: string }
+/** skipped: an optional part that is not set up here, counted neither as passed nor failed. */
+export type Check = { name: string; ok: boolean; detail: string; skipped?: boolean }
 
 const VERSION_TIMEOUT = 15_000
 
@@ -20,10 +24,10 @@ function eventLine(value: unknown): string {
   return JSON.stringify(value)
 }
 
-async function guard(name: string, run: () => Promise<{ ok: boolean; detail: string }>): Promise<Check> {
+async function guard(name: string, run: () => Promise<{ ok: boolean; detail: string; skipped?: boolean }>): Promise<Check> {
   try {
     const outcome = await run()
-    return { name, ok: outcome.ok, detail: outcome.detail }
+    return { name, ok: outcome.ok, detail: outcome.detail, ...(outcome.skipped ? { skipped: true } : {}) }
   } catch (err) {
     return { name, ok: false, detail: message(err) }
   }
@@ -33,8 +37,34 @@ function version(result: { exitCode: number; stdout: string; stderr: string }): 
   return result.stdout.trim() || result.stderr.trim() || `exit ${result.exitCode}`
 }
 
-// `/opencode selftest`: proves on this machine what tests can only fake.
-export async function selfTest($: EngineInterface, o: { bin?: string; dir: string }): Promise<Check[]> {
+export function sourcesCheck(models: WorkerModel[]): Check {
+  const count = (source: WorkerModel['source']) => models.filter(m => m.source === source).length
+  const go = count('go')
+  const zen = count('zen')
+  if (go + zen === 0) return { name: 'model sources', ok: false, detail: 'opencode lists no Go or Zen models: run opencode auth login' }
+  return { name: 'model sources', ok: true, detail: `Go ${go} · Zen ${zen} · Z.AI ${count('zai')}` }
+}
+
+export function zaiCheck(models: WorkerModel[]): Check {
+  const plan = models.filter(m => m.source === 'zai').length
+  return plan > 0
+    ? { name: 'Z.AI Coding Plan', ok: true, detail: `${plan} models` }
+    : { name: 'Z.AI Coding Plan', ok: true, skipped: true, detail: 'not connected: run opencode auth login and pick Z.AI Coding Plan' }
+}
+
+async function localCheck($: EngineInterface, spec: LocalSpec, opts: LocalOptions): Promise<Check> {
+  const bin = spec.argv(opts.dir, opts)[0] ?? ''
+  if ((await $.fs.stat(bin).catch(() => undefined)) === undefined) {
+    return { name: spec.label, ok: true, skipped: true, detail: `not installed (${bin} missing): run scripts/setup-local.sh` }
+  }
+  return (await ping($, spec))
+    ? { name: spec.label, ok: true, detail: `running on :${spec.port}` }
+    : { name: spec.label, ok: true, detail: 'installed, not running (starts on the first decide call)' }
+}
+
+// `/opencode selftest`: proves on this machine what tests can only fake. models and local add
+// the checks for what opencode can reach and for the local decision models.
+export async function selfTest($: EngineInterface, o: { bin?: string; dir: string; models?: WorkerModel[]; local?: LocalOptions }): Promise<Check[]> {
   const checks: Check[] = []
 
   checks.push(
@@ -97,6 +127,12 @@ export async function selfTest($: EngineInterface, o: { bin?: string; dir: strin
     }),
   )
 
+  if (o.models !== undefined) checks.push(sourcesCheck(o.models), zaiCheck(o.models))
+  if (o.local !== undefined) {
+    const local = o.local
+    for (const spec of LOCAL) checks.push(await guard(spec.label, () => localCheck($, spec, local)))
+  }
+
   checks.push(
     await guard('report folder', async () => {
       const folder = o.dir.replace(/\/+$/, '')
@@ -112,6 +148,11 @@ export async function selfTest($: EngineInterface, o: { bin?: string; dir: strin
 
 export function formatChecks(checks: Check[]): string {
   if (checks.length === 0) return ['Self-test: no checks ran.', '0/0 checks passed'].join('\n')
-  const passed = checks.filter(c => c.ok).length
-  return [...checks.map(c => `${c.ok ? '✓' : '✕'} ${c.name}: ${c.detail}`), `${passed}/${checks.length} checks passed`].join('\n')
+  const counted = checks.filter(c => !c.skipped)
+  const passed = counted.filter(c => c.ok).length
+  const skipped = checks.length - counted.length
+  return [
+    ...checks.map(c => `${c.skipped ? '·' : c.ok ? '✓' : '✕'} ${c.name}: ${c.detail}`),
+    `${passed}/${counted.length} checks passed${skipped > 0 ? `, ${skipped} skipped` : ''}`,
+  ].join('\n')
 }

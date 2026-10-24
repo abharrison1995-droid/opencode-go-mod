@@ -635,7 +635,10 @@ export const register: Register = (on, options) => {
 
     if (sub === 'help') return { text: HELP }
 
-    if (sub === 'selftest') return { text: formatChecks(await selfTest($, { bin: await findOpencode($), dir: sessionCwd })) }
+    if (sub === 'selftest') {
+      const local = await localOpts($, options, localDir)
+      return { text: formatChecks(await selfTest($, { bin: await findOpencode($), dir: sessionCwd, models: await models(), local })) }
+    }
 
     if (sub === 'model') {
       if (rest === '') return { text: 'Usage: /opencode model <name>.' }

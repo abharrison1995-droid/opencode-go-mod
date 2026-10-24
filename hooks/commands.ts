@@ -23,7 +23,7 @@ export const HELP = [
   '  /opencode history              recent batches and spend by model',
   '  /opencode status               what is running and what it cost',
   '  /opencode local [start|stop] [kev|laya]  local decision models',
-  '  /opencode selftest             check hang detection, rate limits and notifications here',
+  '  /opencode selftest             check opencode, model sources, local models, hangs, rate limits and notifications',
   '  /opencode help                 this list',
 ].join('\n')
 
