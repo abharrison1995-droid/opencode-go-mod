@@ -18,7 +18,7 @@ import type { LocalOptions, LocalSpec } from './local'
 import type { Rung } from './ladder'
 import { panel } from './panel'
 import type { PanelView } from './panel'
-import { EFFORTS, presetNamed, rate } from './presets'
+import { EFFORTS, NO_PLAN, planPreset, presetIn, presetNamed, presetsFor, rate } from './presets'
 import { batchReport, batchShortReport, changedFiles, delegateShort, writeReport } from './report'
 import type { ReportExtras } from './report'
 import { resolveConflict } from './resolve'
@@ -66,7 +66,7 @@ The worker sees nothing of this conversation: put everything it needs in the pro
 
 Give every coding task a verify command (e.g. npm test) so failures are fixed by the worker, not by you. Runs resume themselves after rate limits, hangs and failures, and fall back to the fallback model. The user can cancel a run from the OpenCode panel.
 
-Set profile to cheap, reliable or strong to pick a preset model and reasoning level, or ladder to start on a healthy free model and escalate to paid ones if it fails (an explicit model or effort wins). Report defaults to short with the full report in a file; pass full to read it inline.
+Set profile to cheap, reliable or strong to pick a preset model and reasoning level, plan for the user's Z.AI Coding Plan, or ladder to start on a healthy free model and escalate (through the Z.AI Coding Plan, when connected) to paid ones if it fails (an explicit model or effort wins). Report defaults to short with the full report in a file; pass full to read it inline.
 
 Several delegate calls in one message may run one after another rather than together; for real parallel work use delegate_batch, which gives each worker its own folder.
 
@@ -89,7 +89,7 @@ async function registerTool($: EngineInterface, models: WorkerModel[]) {
       properties: {
         prompt: { type: 'string', description: 'The complete, self-contained task for the worker model.' },
         model: { type: 'string', description: 'provider/model (e.g. opencode-go/kimi-k3), or a bare id under opencode-go/. Default: the model picked in the OpenCode panel.' },
-        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder'], description: 'Preset model and reasoning level; an explicit model or effort wins.' },
+        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder', 'plan'], description: 'Preset model and reasoning level; an explicit model or effort wins.' },
         effort: { type: 'string', enum: EFFORTS, description: 'Reasoning level. Default: the level picked in the OpenCode panel. Ignored by a model without that level.' },
         dir: { type: 'string', description: 'Directory the worker runs in (absolute, or relative to the session). Default: the session directory.' },
         sessionId: { type: 'string', description: 'An earlier sessionId from this tool, to continue that opencode session.' },
@@ -108,7 +108,7 @@ async function registerTool($: EngineInterface, models: WorkerModel[]) {
     name: 'delegate_batch',
     description: `Runs several opencode workers at once, each in its own git worktree (or a copy) so they never edit the same files. Tasks may depend on each other and start in dependency order. The report gives each task's status, cost, folder/branch, git diff --stat, actions and answer; review their branches and merge what is good.
 
-Use it for independent pieces of work that can run in parallel, or for a larger job split into clear parts. Workers see nothing of this conversation: put common context in shared and each task's own work in its prompt. Pass files to attach them. Give every coding task a verify command so failures are fixed by the worker, not by you. maxCost stops the batch starting more tasks once it has cost that much. Set profile (cheap, reliable, strong, or ladder: healthy free models first, escalating to paid) for preset models and reasoning; autoMerge merges passing worktree tasks into a branch of its own, autoResolve has workers fix their own merge conflicts, and review has a free model check each task's diff so you read only flagged ones. A task with dependsOn starts from its dependencies' branches.
+Use it for independent pieces of work that can run in parallel, or for a larger job split into clear parts. Workers see nothing of this conversation: put common context in shared and each task's own work in its prompt. Pass files to attach them. Give every coding task a verify command so failures are fixed by the worker, not by you. maxCost stops the batch starting more tasks once it has cost that much. Set profile (cheap, reliable, strong, plan for the Z.AI Coding Plan, or ladder: healthy free models first, then the Z.AI Coding Plan when connected, escalating to paid) for preset models and reasoning; autoMerge merges passing worktree tasks into a branch of its own, autoResolve has workers fix their own merge conflicts, and review has a free model check each task's diff so you read only flagged ones. A task with dependsOn starts from its dependencies' branches.
 
 Runs resume themselves after rate limits, hangs and failures, and fall back to the fallback model. The user can cancel from the OpenCode panel. Report defaults to short with the full report in a file; pass full to read it inline.
 
@@ -123,7 +123,7 @@ With background true it returns at once and the report arrives as a new message 
         verify: { type: 'string', description: 'Default verify command for tasks without one. Strongly recommended for coding tasks.' },
         verifyRounds: { type: 'integer', minimum: 0, maximum: 5, description: 'Default verify fix-up rounds. Default 2.' },
         maxCost: { type: 'number', minimum: 0, description: 'USD; no more tasks start once the batch has cost this much.' },
-        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder'], description: 'Default preset model and reasoning for tasks; explicit model/effort wins.' },
+        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder', 'plan'], description: 'Default preset model and reasoning for tasks; explicit model/effort wins.' },
         autoResolve: { type: 'boolean', description: 'With autoMerge: a task that conflicts gets the merged branch brought into its worktree, its worker resolves the conflict, and it is merged. Default false.' },
         review: { type: 'boolean', description: "After each task, a read-only reviewer (the reviewModel setting, free by default) checks its diff against its prompt; the report flags concerns. Default false." },
         autoMerge: { type: 'boolean', description: 'With worktree isolation, merge tasks whose verify passed (or that had none) into oc/<batch>-merged. Default false.' },
@@ -139,7 +139,7 @@ With background true it returns at once and the report arrives as a new message 
               prompt: { type: 'string', description: 'The complete, self-contained task for this worker.' },
               title: { type: 'string', description: 'A short title for the report. Default: the id.' },
               model: { type: 'string', description: 'provider/model, or a bare id under opencode-go/. Default: the panel model.' },
-              profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder'], description: 'Preset model and reasoning for this task; an explicit model or effort wins.' },
+              profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder', 'plan'], description: 'Preset model and reasoning for this task; an explicit model or effort wins.' },
               effort: { type: 'string', enum: EFFORTS, description: 'Reasoning level. Default: the panel level. Ignored by a model without that level.' },
               readOnly: { type: 'boolean', description: "Run the read-only plan agent (--agent plan) for this task." },
               dependsOn: { type: 'array', items: { type: 'string' }, description: 'Ids of tasks in this batch that must finish (done) first.' },
@@ -398,6 +398,11 @@ async function showStatus($: EngineInterface) {
     const parts = all.map(r => `${r.model.split('/')[1] ?? r.model}:${r.steps}${retry(r.attempt)}`).join(', ')
     $.ui.status(`opencode: ${all.length} running · ${parts}`)
   }
+}
+
+// Whether the zaiQuota option leaves room for another Z.AI Coding Plan run.
+async function planRoom($: EngineInterface, quota: number): Promise<boolean> {
+  return quota === 0 || usedIn(await read($, planUse), Date.now()) < quota
 }
 
 async function addSpend($: EngineInterface, cost: number, model: string, calls?: Record<string, number>) {
@@ -725,9 +730,9 @@ export const register: Register = (on, options) => {
     }
 
     if (sub === 'preset') {
-      const list = async (prefix: string) => ({ text: presetsText(prefix, await current($, defaultModel), await read($, effort)) })
+      const list = async (prefix: string) => ({ text: presetsText(prefix, await current($, defaultModel), await read($, effort), presetsFor((await read($, catalog)).models)) })
       if (rest === '') return list('Presets:')
-      const preset = presetNamed(rest)
+      const preset = presetIn((await read($, catalog)).models, rest)
       if (preset === undefined) return list(`Unknown preset "${rest}". Presets:`)
       await applyPreset($, preset)
       return { text: `Preset ${preset.name}: ${preset.model} · ${preset.effort}` }
@@ -876,8 +881,10 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     }
 
     const allModels = (await read($, catalog)).models
-    const rungs = input.profile === 'ladder' && !input.model ? ladder(allModels, await read($, health)) : []
-    const profile = typeof input.profile === 'string' ? presetNamed(input.profile) ?? (input.profile === 'ladder' ? presetNamed('reliable') : undefined) : undefined
+    if (input.profile === 'plan' && !input.model && planPreset(allModels) === undefined) return { deny: NO_PLAN }
+    const planOk = await planRoom($, Number(options.zaiQuota ?? 0) || 0)
+    const rungs = input.profile === 'ladder' && !input.model ? ladder(allModels, await read($, health), planOk) : []
+    const profile = typeof input.profile === 'string' ? presetIn(allModels, input.profile) ?? (input.profile === 'ladder' ? presetNamed('reliable') : undefined) : undefined
     const model = input.model ? fullId(input.model) : rungs[0]?.model ?? profile?.model ?? (await current($, defaultModel))
     const wanted = input.effort ?? rungs[0]?.effort ?? profile?.effort ?? (await read($, effort))
     const known = allModels.find(m => m.id === model)
@@ -1040,13 +1047,15 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const panelModel = await current($, defaultModel)
     const panelEffort = await read($, effort)
     const models = (await read($, catalog)).models
+    if ((input.profile === 'plan' || specs.some(t => t.profile === 'plan' && !t.model)) && planPreset(models) === undefined) return { deny: NO_PLAN }
     const healthNow = await read($, health)
+    const planOk = await planRoom($, Number(options.zaiQuota ?? 0) || 0)
     const ladders = new Map<string, Rung[]>()
     const choose = (t: TaskSpec) => {
       const name = typeof t.profile === 'string' ? t.profile : typeof input.profile === 'string' ? input.profile : undefined
-      const rungs = name === 'ladder' && !t.model ? ladder(models, healthNow) : []
+      const rungs = name === 'ladder' && !t.model ? ladder(models, healthNow, planOk) : []
       if (rungs.length > 0) ladders.set(t.id, rungs)
-      const profile = name === undefined ? undefined : presetNamed(name) ?? (name === 'ladder' ? presetNamed('reliable') : undefined)
+      const profile = name === undefined ? undefined : presetIn(models, name) ?? (name === 'ladder' ? presetNamed('reliable') : undefined)
       const model = t.model ? fullId(t.model) : rungs[0]?.model ?? profile?.model ?? panelModel
       const wanted = t.effort ?? rungs[0]?.effort ?? profile?.effort ?? panelEffort
       const known = models.find(m => m.id === model)

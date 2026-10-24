@@ -133,7 +133,7 @@ export type LocalServer = { status: 'off' | 'starting' | 'ready' | 'error'; erro
 export type DelegateInput = {
   prompt: string
   model?: string
-  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder'
+  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder' | 'plan'
   effort?: Effort
   dir?: string
   sessionId?: string
@@ -151,7 +151,7 @@ export type DelegateBatchTask = {
   prompt: string
   title?: string
   model?: string
-  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder'
+  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder' | 'plan'
   effort?: Effort
   readOnly?: boolean
   dependsOn?: string[]
@@ -169,7 +169,7 @@ export type DelegateBatchInput = {
   verify?: string
   verifyRounds?: number
   maxCost?: number
-  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder'
+  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder' | 'plan'
   autoMerge?: boolean
   autoResolve?: boolean
   review?: boolean

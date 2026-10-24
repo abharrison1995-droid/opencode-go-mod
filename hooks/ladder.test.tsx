@@ -3,7 +3,7 @@ import { expect, test } from 'claude-code/testing'
 import type { ModelHealth, WorkerModel } from '../types'
 import { runResilient } from './delegate'
 import { ladder } from './ladder'
-import { presetNamed } from './presets'
+import { planPreset, presetNamed, presetsFor } from './presets'
 import { RUN } from './testkit'
 
 const wm = (id: string, free = true): WorkerModel => ({
@@ -151,4 +151,25 @@ test('firstRetries 1 limits the starting model to one retry', async () => {
   expect(spawned[0]![spawned[0]!.indexOf('-m') + 1]).toBe('opencode-go/kimi-k3')
   expect(spawned[1]![spawned[1]!.indexOf('-m') + 1]).toBe('opencode-go/kimi-k3')
   expect(spawned[2]![spawned[2]!.indexOf('-m') + 1]).toBe('opencode-go/beam-free')
+})
+
+const zai = (id: string): WorkerModel => ({ ...wm(id), source: 'zai' })
+
+test('planPreset picks GLM-5.3 from the Z.AI Coding Plan, and none without it', () => {
+  expect(planPreset([wm('opencode-go/beam-free')])).toBeUndefined()
+  expect(planPreset([zai('zai-coding-plan/glm-5.3-flash'), zai('zai-coding-plan/glm-5.3')])?.model).toBe('zai-coding-plan/glm-5.3')
+  expect(planPreset([zai('zhipuai-coding-plan/glm-5.3-flash')])?.model).toBe('zhipuai-coding-plan/glm-5.3-flash')
+  expect(presetsFor([wm('opencode-go/beam-free')]).map(p => p.name)).toEqual(['cheap', 'reliable', 'strong'])
+  expect(presetsFor([zai('zai-coding-plan/glm-5.3')]).map(p => p.name)).toEqual(['cheap', 'reliable', 'strong', 'plan'])
+})
+
+test('the ladder climbs through the Z.AI Coding Plan between free and paid models', () => {
+  const models = [wm('opencode-go/beam-free'), zai('zai-coding-plan/glm-5.3')]
+  expect(ladder(models, {}).map(r => r.model)).toEqual(['opencode-go/beam-free', 'zai-coding-plan/glm-5.3', reliable.model, strong.model])
+})
+
+test('the ladder skips the Z.AI Coding Plan when its quota is used up or it keeps failing', () => {
+  const models = [wm('opencode-go/beam-free'), zai('zai-coding-plan/glm-5.3')]
+  expect(ladder(models, {}, false).map(r => r.model)).toEqual(['opencode-go/beam-free', reliable.model, strong.model])
+  expect(ladder(models, { 'zai-coding-plan/glm-5.3': health(0, 10) }).map(r => r.model)).not.toContain('zai-coding-plan/glm-5.3')
 })

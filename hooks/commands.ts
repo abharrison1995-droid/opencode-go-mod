@@ -2,7 +2,6 @@ import type { Batch, BatchSummary, Effort, Job, LocalServer, Preset, WorkerModel
 import { isFree, isPlan, price } from './catalog'
 import type { LocalSpec } from './local'
 import { ageOf, ICONS, shortModel } from './panel'
-import { PRESETS } from './presets'
 
 // The `/opencode` subcommands' parsing and text. register.tsx reads and changes the state around these.
 
@@ -83,8 +82,8 @@ export function statusText(o: { model: string; level: Effort; isChat: boolean; r
   ].join('\n')
 }
 
-export function presetsText(prefix: string, model: string, level: Effort) {
-  const rows = PRESETS.map(
+export function presetsText(prefix: string, model: string, level: Effort, presets: Preset[]) {
+  const rows = presets.map(
     (p: Preset) => `${p.name}${p.model === model && p.effort === level ? ' (current)' : ''} · ${p.model} · ${p.effort} · ${p.note}`,
   )
   return [prefix, ...rows].filter(line => line !== '').join('\n')

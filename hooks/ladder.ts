@@ -1,6 +1,6 @@
 import type { Effort, ModelHealth, WorkerModel } from '../types'
 import { isFree } from './catalog'
-import { presetNamed, rate } from './presets'
+import { planPreset, presetNamed, rate } from './presets'
 
 export type Rung = { model: string; effort?: Effort; retries?: number }
 
@@ -8,7 +8,8 @@ const runs = (h: ModelHealth) => h.ok + h.failed + h.rateLimited + h.hung
 
 // The `ladder` profile: the models a run climbs, cheapest first. The first rung is the
 // starting model; runResilient moves to the next after the current one's retries fail.
-export function ladder(models: WorkerModel[], health: Record<string, ModelHealth>): Rung[] {
+// planOk: whether the Z.AI Coding Plan's quota has room; its rung sits between the free and paid ones.
+export function ladder(models: WorkerModel[], health: Record<string, ModelHealth>, planOk = true): Rung[] {
   const free = models
     .map((m, i) => ({ m, i }))
     .filter(({ m, i }) => isFree(m) && models.findIndex(x => x.id === m.id) === i)
@@ -28,6 +29,8 @@ export function ladder(models: WorkerModel[], health: Record<string, ModelHealth
   const add = (model: string, effort?: Effort) => {
     if (!rungs.some(r => r.model === model)) rungs.push({ model, effort })
   }
+  const plan = planPreset(models)
+  if (plan !== undefined && planOk && rate(health[plan.model]) !== 'bad') rungs.push({ model: plan.model, effort: plan.effort, retries: 1 })
   const reliable = presetNamed('reliable')
   const strong = presetNamed('strong')
   if (reliable !== undefined) add(reliable.model, reliable.effort)

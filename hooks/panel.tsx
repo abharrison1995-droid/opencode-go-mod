@@ -8,7 +8,7 @@ import { repoOf } from './git'
 import type { TaskAction } from './git'
 import { LOCAL, ownsLocal } from './local'
 import type { LocalSpec } from './local'
-import { EFFORTS, PRESETS, rate } from './presets'
+import { EFFORTS, presetsFor, rate } from './presets'
 
 // What the panel shows, read from state by register.tsx, which alone holds the atoms.
 export type PanelView = {
@@ -124,7 +124,8 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
     ),
   ]
   const planBatches = [...liveBatches].sort((a, b) => b.startedAt - a.startedAt).slice(0, 3)
-  const matchingPreset = PRESETS.find(p => p.model === model && p.effort === level)
+  const presets = presetsFor(cat.models)
+  const matchingPreset = presets.find(p => p.model === model && p.effort === level)
   const modelHealth = healthData[model]
   const modelRating = rate(modelHealth)
   const modelRuns = modelHealth === undefined ? 0 : modelHealth.ok + modelHealth.failed + modelHealth.rateLimited + modelHealth.hung
@@ -279,7 +280,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
       <Box flexDirection="column">
         <Text dimColor size="caption">PRESETS</Text>
         <Box flexDirection="row" gap={1} flexWrap="wrap">
-          {PRESETS.map(p => (
+          {presets.map(p => (
             <Button
               key={`preset:${p.name}`}
               label={p.name}

@@ -399,6 +399,24 @@ test('a run on a plan model records its model calls, and the daily budget does n
   expect(uses.map(u => u.calls)).toEqual([1])
 })
 
+test('the plan profile runs on the Z.AI Coding Plan, and is refused without it', async ($, on) => {
+  const spawned: SpawnCall[] = []
+  engine(on, { spawned, models: ZAI_MODELS })
+  await start($)
+  const ok = await $.tool.call(delegate({ prompt: 'work', profile: 'plan' }) as any)
+  expect((ok as any).deny).toBeUndefined()
+  expect(spawned[0]!.argv).toContain('zai-coding-plan/glm-5.3')
+})
+
+test('the plan profile is refused when no plan model is listed', async ($, on) => {
+  const spawned: SpawnCall[] = []
+  engine(on, { spawned })
+  await start($)
+  const refused = await $.tool.call(delegate({ prompt: 'work', profile: 'plan' }) as any)
+  expect(String((refused as any).deny)).toContain('Z.AI Coding Plan')
+  expect(spawned.length).toBe(0)
+})
+
 test('cancel(job id) stops a running resume as cancelled', { options: { autoRetries: 0 } }, async ($, on) => {
   let started!: () => void
   const running = new Promise<void>(resolve => (started = resolve))
