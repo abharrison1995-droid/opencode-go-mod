@@ -1,6 +1,6 @@
 {
   "name": "opencode-go",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "license": "MIT",
   "description": "Lets Claude delegate tasks to OpenCode Go, Zen and Z.AI Coding Plan models, picked in an OpenCode panel with FREE, PAID and Z.AI PLAN sections and a reasoning level, and ask local decision models (Kev, Laya) quick questions.",
   "author": {

@@ -4,6 +4,25 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.10.0]
+
+### Added
+
+- `plan` preset and profile for the Z.AI Coding Plan (GLM-5.3), offered when opencode lists the plan's models.
+- The `ladder` profile tries the Z.AI Coding Plan between the free and paid models, while it is healthy and has quota.
+- Z.AI Coding Plan use: model calls on plan models over the last 5 hours, shown under Z.AI PLAN. The `zaiQuota` option stops new plan runs at a limit.
+- `/opencode selftest` checks which model sources opencode lists (Go, Zen, Z.AI) and whether Kev and Laya are installed or running. Optional parts not set up are skipped, not failed.
+- `scripts/setup-local.sh` installs Kev and Laya; `/opencode local setup` prints its command.
+- `scripts/check.sh` runs every release check, and a GitHub Actions workflow runs validate and the tests on each push and pull request.
+- Panel tests for Z.AI PLAN, the plan preset and LOCAL.
+- An icon.
+
+### Changed
+
+- Descriptions name Go, Zen and the Z.AI Coding Plan, not only OpenCode Go.
+- Starting a local model that is not installed reports it instead of spawning a missing binary.
+- README: a quick start, the LOCAL panel section, and the new options and commands.
+
 ## [0.9.0]
 
 ### Added

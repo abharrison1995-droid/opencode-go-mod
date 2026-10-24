@@ -27,15 +27,18 @@ opencode-go is a Claude Code mod (a function-hooks plugin). It lets Claude deleg
 - `hooks/report.ts`: short and full reports, and the merge section.
 - `hooks/git.ts`: diff, merge and discard for task branches, and `repoOf`.
 - `hooks/health.ts`: `recordRun`, the per-model health counters.
-- `hooks/presets.ts`: the cheap, reliable and strong presets, and `rate()`.
+- `hooks/presets.ts`: the cheap, reliable and strong presets, the `plan` preset when the Z.AI Coding Plan is listed (`presetsFor`, `presetIn`), and `rate()`.
 - `hooks/ladder.ts`: the `ladder` profile, models from cheapest to strongest.
 - `hooks/resolve.ts`: autoResolve, where a worker fixes its own merge conflict.
 - `hooks/review.ts`: a read-only reviewer that checks a task's diff.
 - `hooks/selftest.ts`: `/opencode selftest`.
-- `hooks/catalog.ts`: model list and cache.
+- `hooks/catalog.ts`: model list and cache, and the sources: Go, Zen, and the Z.AI Coding Plan (`isPlan`, `costsMoney`).
+- `hooks/quota.ts`: the Z.AI Coding Plan's 5-hour window: model calls used, when it eases, the `zaiQuota` message.
 - `hooks/chat.ts`: chat mode.
 - `hooks/control.ts`: AbortController registry for cancel.
 - `hooks/local.ts`: the local decision models (Kev, Laya) behind `decide`: `startLocal`, `askLocal`, `stopLocal`, `ping`. The servers it spawns live in a module-level map, so a reload stops them.
+- `scripts/check.sh`: every release check: validate, the tests, the scripts' tests and the type-check. `.github/workflows/check.yml` runs all but the type-check on GitHub.
+- `scripts/setup-local.sh`: installs Kev and Laya into the models folder; `/opencode local setup` prints its command.
 - `scripts/typecheck.sh`: type-checks `hooks` and `types` against the engine's declarations.
 - `scripts/kev_split.py`: starts Kev split between the GPU and RAM when `kevGpuGb` is set. It runs outside the engine, in Kev's own venv.
 - `hooks/timers.d.ts`: declares `setTimeout` for the tests, which have host timers. Hooks code must not rely on it.
@@ -53,9 +56,10 @@ opencode-go is a Claude Code mod (a function-hooks plugin). It lets Claude deleg
 ## Checking your work
 
 ```bash
-claude plugin validate .
-claude plugin test .
+scripts/check.sh
 ```
+
+or the parts: `claude plugin validate .`, `claude plugin test .`.
 
 Both must pass: validation reports "passed" or "passed with warnings", and every test passes. These need Claude Code 2.1.304 or later. Check `claude --version` first: an older `claude` on PATH fails validation with errors that are not about the mod (2.1.282 reports `"prompt.compose" is not an event`). The desktop app keeps newer builds in `~/.config/Claude/claude-code/<version>/*/claude`.
 
