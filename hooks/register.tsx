@@ -56,7 +56,7 @@ function describe(models: WorkerModel[], health: Record<string, ModelHealth> = {
   const more = paid.length > 8 ? `, and ${paid.length - 8} more in the OpenCode panel` : ''
   const shaky = (id: string) => (rate(health[id]) === 'shaky' ? ' (shaky)' : '')
   const unreliable = [...free, ...paid, ...plan].filter(m => rate(health[m.id]) === 'bad').map(m => m.id)
-  return `Delegate a self-contained task to a cheaper model through the user's OpenCode Go subscription, run as a full opencode agent (it can read, edit and run commands in the given directory), and wait for its answer.
+  return `Delegate a self-contained task to a cheaper model through opencode (the user's OpenCode Go subscription, Zen's free models, or their Z.AI Coding Plan), run as a full opencode agent (it can read, edit and run commands in the given directory), and wait for its answer.
 
 Use it for routine, well-specified work: boilerplate, bulk edits, writing tests to a clear spec, summarising files, first drafts, mechanical refactors. Keep planning, judgement and review for yourself, and check what it changed (git diff, tests) before reporting success.
 
@@ -760,8 +760,8 @@ export const register: Register = (on, options) => {
   on('prompt.compose', async ($, e, next) => {
     const composed = await next(e)
     if (options.orchestrate === false || (await read($, chat))) return composed
-    const text = `# Delegating to OpenCode Go
-The user has OpenCode Go wired in through the ${TOOL} tool. Act as the orchestrator: plan, split work into independent, clearly specified pieces, hand routine pieces to OpenCode models with ${TOOL} (or ${BATCH_TOOL} to run several at once, each in its own git worktree), and review their output yourself. Do the hard reasoning, architecture and final verification yourself. Do small one-step edits directly when explaining them would cost more than doing them.
+    const text = `# Delegating to OpenCode
+The user has OpenCode workers (Go, Zen and any Z.AI Coding Plan models) wired in through the ${TOOL} tool. Act as the orchestrator: plan, split work into independent, clearly specified pieces, hand routine pieces to OpenCode models with ${TOOL} (or ${BATCH_TOOL} to run several at once, each in its own git worktree), and review their output yourself. Do the hard reasoning, architecture and final verification yourself. Do small one-step edits directly when explaining them would cost more than doing them.
 The user's chosen worker is ${await current($, defaultModel)} at ${await read($, effort)} reasoning (set in the OpenCode panel).`
     return { sections: [...composed.sections, { id: 'opencode-go:orchestrate', text, scope: 'session' as const }] }
   })

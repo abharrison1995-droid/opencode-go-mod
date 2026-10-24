@@ -1,6 +1,6 @@
 # opencode-go
 
-A Claude Code mod that lets Claude delegate tasks to cheaper models through an [OpenCode Go](https://opencode.ai) subscription, using the `opencode` CLI. Claude plans and reviews; OpenCode workers do the routine work.
+A Claude Code mod that lets Claude delegate tasks to cheaper models through the `opencode` CLI: an [OpenCode Go](https://opencode.ai) subscription, Zen's free models, and a [Z.AI Coding Plan](https://z.ai) if you have one. Claude plans and reviews; OpenCode workers do the routine work.
 
 ## Requirements
 
@@ -129,7 +129,7 @@ On mobile the panel is compact: it shows the worker, reasoning and presets, rece
 | Option | What it does | Default |
 | --- | --- | --- |
 | `defaultModel` | Worker used until one is picked in the OpenCode panel (provider/model, or a bare id under `opencode-go/`). | `opencode-go/kimi-k3` |
-| `orchestrate` | Adds a short system prompt section telling Claude to hand routine work to OpenCode Go models. | `true` |
+| `orchestrate` | Adds a short system prompt section telling Claude to hand routine work to OpenCode workers. | `true` |
 | `fallbackModel` | Model a run switches to after the picked one keeps failing (429s, hangs). Empty: no fallback. | `opencode-go/deepseek-v4.1-flash` |
 | `autoRetries` | How many times a failed or hung opencode run is resumed before giving up (and trying the fallback model). | `3` |
 | `stallMinutes` | A run that prints nothing for this long is killed and resumed. | `10` |

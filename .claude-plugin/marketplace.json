@@ -1,6 +1,6 @@
 {
   "name": "opencode-go-mod",
-  "description": "Claude Code mods for delegating work to OpenCode Go models.",
+  "description": "Claude Code mods for delegating work to OpenCode Go, Zen and Z.AI Coding Plan models.",
   "owner": {
     "name": "abharrison1995-droid"
   },
@@ -8,7 +8,7 @@
     {
       "name": "opencode-go",
       "source": "./",
-      "description": "Delegate tasks to OpenCode Go models, picked in an OpenCode panel."
+      "description": "Delegate tasks to OpenCode Go, Zen and Z.AI Coding Plan models, picked in an OpenCode panel."
     }
   ]
 }
