@@ -120,6 +120,9 @@ export type Preview = { title: string; text: string }
 /** What OpenCode runs cost, as opencode reports it (USD). */
 export type Spend = { session: number; runs: number }
 
+/** Model calls a finished run made on Z.AI Coding Plan models. */
+export type PlanUse = { at: number; calls: number }
+
 /** A local decision model the mod can serve. */
 export type LocalName = 'kev' | 'laya'
 
@@ -226,6 +229,8 @@ declare module 'claude-code' {
       preview: Preview | null
       /** Kev and Laya servers on this machine */
       local: Record<string, LocalServer>
+      /** Z.AI Coding Plan model calls in the last 5 hours (also in $.store 'planUse') */
+      planUse: PlanUse[]
     }
   }
 }

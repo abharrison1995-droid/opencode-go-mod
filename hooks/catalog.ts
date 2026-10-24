@@ -68,8 +68,9 @@ export async function findOpencode($: EngineInterface): Promise<string | undefin
 // The providers opencode serves the Z.AI (GLM) Coding Plan through: z.ai, and bigmodel.cn in China.
 export const PLAN_PROVIDERS = ['zai-coding-plan', 'zhipuai-coding-plan']
 
-const sourceOf = (id: string): WorkerModel['source'] =>
-  id.startsWith('opencode-go/') ? 'go' : PLAN_PROVIDERS.includes(id.split('/')[0] ?? '') ? 'zai' : 'zen'
+export const isPlanId = (id: string) => PLAN_PROVIDERS.includes(id.split('/')[0] ?? '')
+
+const sourceOf = (id: string): WorkerModel['source'] => (id.startsWith('opencode-go/') ? 'go' : isPlanId(id) ? 'zai' : 'zen')
 
 // `opencode models --verbose` prints each model as a `provider/id` line followed by its JSON.
 export function parseModels(out: string): WorkerModel[] {

@@ -50,6 +50,12 @@
       "description": "Model that reviews batch tasks when delegate_batch is called with review: true. A free model is enough.",
       "default": "opencode/deepseek-v4.1-flash-free"
     },
+    "zaiQuota": {
+      "type": "number",
+      "title": "Z.AI quota (model calls per 5 hours)",
+      "description": "Runs on Z.AI Coding Plan models stop starting once the last 5 hours reach this many model calls (each step a worker takes is one). The plan counts prompts, so set this from what you see in your z.ai usage page. 0: no limit.",
+      "default": 0
+    },
     "localModelsDir": {
       "type": "string",
       "title": "Local models folder",

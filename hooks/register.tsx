@@ -1,10 +1,10 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Batch, BatchSummary, BatchTask, Catalog, DecideInput, DelegateBatchInput, DelegateInput, Effort, Job, LocalName, LocalServer, ModelHealth, Preset, Preview, Spend, WorkerModel } from '../types'
+import type { Batch, BatchSummary, PlanUse, BatchTask, Catalog, DecideInput, DelegateBatchInput, DelegateInput, Effort, Job, LocalName, LocalServer, ModelHealth, Preset, Preview, Spend, WorkerModel } from '../types'
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
-import { costsMoney, findOpencode, fullId, isFree, loadCatalog, price, readCache, worker, writeCache } from './catalog'
+import { costsMoney, findOpencode, fullId, isFree, isPlan, loadCatalog, price, readCache, worker, writeCache } from './catalog'
 import { batchesText, diffText, effortText, HELP, historyText, localText, matchJob, matchModel, modelsText, parseArgs, presetsText, statusText } from './commands'
 import { chatTools, explainError, readKey, requestBody, sendWithRetry, toMessages } from './chat'
 import { cancel, track, tracked, untrack } from './control'
@@ -24,6 +24,7 @@ import type { ReportExtras } from './report'
 import { resolveConflict } from './resolve'
 import { reviewTask } from './review'
 import { formatChecks, selfTest } from './selftest'
+import { planCalls, prune, quotaMessage, resetAt, usedIn } from './quota'
 
 const catalog = atom({ plugin: 'opencode-go', key: 'catalog' } as const, { status: 'loading', models: [] } as Catalog)
 const picked = atom({ plugin: 'opencode-go', key: 'model' } as const, '')
@@ -42,6 +43,7 @@ const history = atom({ plugin: 'opencode-go', key: 'history' } as const, [] as B
 const spendByModel = atom({ plugin: 'opencode-go', key: 'spendByModel' } as const, {} as Record<string, number>)
 const preview = atom({ plugin: 'opencode-go', key: 'preview' } as const, null as Preview | null)
 const local = atom({ plugin: 'opencode-go', key: 'local' } as const, {} as Record<string, LocalServer>)
+const planUse = atom({ plugin: 'opencode-go', key: 'planUse' } as const, [] as PlanUse[])
 
 const TOOL = 'mcp__opencode-go__delegate'
 const BATCH_TOOL = 'mcp__opencode-go__delegate_batch'
@@ -254,7 +256,7 @@ export async function resumeTask($: EngineInterface, batchId: string, taskId: st
           await showStatus($)
         },
       )
-      await addSpend($, outcome.run.cost, outcome.model)
+      await addSpend($, outcome.run.cost, outcome.model, outcome.run.calls)
       if (task.branch !== undefined) await commitTask($, dir, `opencode ${batchId}/${taskId}: ${task.title}`)
 
       const failed = outcome.reason !== 'ok'
@@ -398,7 +400,13 @@ async function showStatus($: EngineInterface) {
   }
 }
 
-async function addSpend($: EngineInterface, cost: number, model: string) {
+async function addSpend($: EngineInterface, cost: number, model: string, calls?: Record<string, number>) {
+  const onPlan = planCalls(calls)
+  if (onPlan > 0) {
+    const now = Date.now()
+    await update($, planUse, u => [...prune(u, now), { at: now, calls: onPlan }])
+    await $.store.set('planUse', await read($, planUse))
+  }
   await update($, spend, s => ({ session: s.session + cost, runs: s.runs + 1 }))
   await update($, spendByModel, m => ({ ...m, [model]: (m[model] ?? 0) + cost }))
   await $.store.set('spendByModel', await read($, spendByModel))
@@ -604,6 +612,11 @@ export const register: Register = (on, options) => {
     if (isHealthMap(storedHealth) && Object.keys(await read($, health)).length === 0) await update($, health, () => storedHealth)
     const storedHistory = await $.store.get('history')
     if (Array.isArray(storedHistory) && (await read($, history)).length === 0) await update($, history, () => storedHistory as BatchSummary[])
+    const storedPlanUse = await $.store.get('planUse')
+    if (Array.isArray(storedPlanUse) && (await read($, planUse)).length === 0) {
+      const uses = storedPlanUse.filter((u): u is PlanUse => typeof u?.at === 'number' && typeof u?.calls === 'number')
+      await update($, planUse, () => prune(uses, Date.now()))
+    }
     const storedSpendByModel = await $.store.get('spendByModel')
     if (isNumberMap(storedSpendByModel) && Object.keys(await read($, spendByModel)).length === 0) {
       await update($, spendByModel, () => storedSpendByModel)
@@ -882,6 +895,12 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       const spent = await dailySpent($, localDate(Date.now()))
       if (spent >= budget) return { deny: budgetMessage(budget, spent) }
     }
+    const quota = Number(options.zaiQuota ?? 0) || 0
+    if (quota > 0 && known !== undefined && isPlan(known)) {
+      const uses = await read($, planUse)
+      const now = Date.now()
+      if (usedIn(uses, now) >= quota) return { deny: quotaMessage(usedIn(uses, now), quota, resetAt(uses, now)) }
+    }
 
     const verdict = contextVerdict(input.prompt.length + (await attachedChars($, files)), known)
     if (verdict !== undefined && verdict.level === 'over') return { deny: overContext(verdict) }
@@ -946,7 +965,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
 
       const failure = [...outcome.run.errors, outcome.stderr].filter(text => text.trim() !== '').join('\n')
       await noteHealth($, attemptModel, outcome.reason, Date.now() - attemptAt, outcome.reason === 'ok' ? undefined : failure)
-      await addSpend($, outcome.run.cost, outcome.model)
+      await addSpend($, outcome.run.cost, outcome.model, outcome.run.calls)
       const used = (await read($, catalog)).models.find(m => m.id === outcome.model)
       const short = outcome.model.split('/')[1] ?? outcome.model
       const same = outcome.model === model
@@ -1119,6 +1138,12 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
         const spent = await dailySpent($, localDate(Date.now()))
         if (spent >= dailyBudget) return { status: 'skipped' as const, cost: 0, steps: 0, error: budgetMessage(dailyBudget, spent) }
       }
+      const quota = Number(options.zaiQuota ?? 0) || 0
+      if (quota > 0 && known !== undefined && isPlan(known)) {
+        const uses = await read($, planUse)
+        const now = Date.now()
+        if (usedIn(uses, now) >= quota) return { status: 'skipped' as const, cost: 0, steps: 0, error: quotaMessage(usedIn(uses, now), quota, resetAt(uses, now)) }
+      }
       if (batchSignal.aborted) return { status: 'cancelled' as const, cost: 0, steps: 0, error: 'batch cancelled' }
 
       let prepared: { dir: string; branch?: string }
@@ -1191,7 +1216,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
         }
         if (failed && outcome.stderr.trim() !== '') errors.push(outcome.stderr.trim())
         await noteHealth($, attemptModel, outcome.reason, Date.now() - attemptAt, failed ? errors.join('\n') : undefined)
-        await addSpend($, outcome.run.cost, outcome.model)
+        await addSpend($, outcome.run.cost, outcome.model, outcome.run.calls)
 
         extras.answers![task.id] = outcome.run.text || '(no text answer)'
         if (isolation === 'worktree') {
@@ -1352,6 +1377,8 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       byModel: await read($, spendByModel),
       shownPreview: await read($, preview),
       localNow: await read($, local),
+      planUses: await read($, planUse),
+      planQuota: Number(options.zaiQuota ?? 0) || 0,
     }
     return panel($.ui.resolve(e), e.surface, view, {
       pick: id => void pick($, id),

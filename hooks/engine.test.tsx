@@ -366,6 +366,39 @@ test('the daily budget blocks paid runs but not free ones', { options: { dailyBu
   expect(spawned.length).toBe(1)
 })
 
+const ZAI_MODELS = `${MODELS}\nzai-coding-plan/glm-5.3\n${JSON.stringify({ name: 'GLM-5.3', status: 'active', cost: { input: 0, output: 0 }, limit: { output: 131072 } })}`
+
+test('the Z.AI quota blocks plan runs once used up, and not Go runs', { options: { zaiQuota: 5, dailyBudget: 1 } }, async ($, on) => {
+  const store = new Map<string, unknown>([
+    ['planUse', [{ at: Date.now() - 60_000, calls: 5 }]],
+    ['spendDaily', { date: localDate(Date.now()), usd: 0 }],
+  ])
+  const spawned: SpawnCall[] = []
+  engine(on, { store, spawned, models: ZAI_MODELS })
+  await start($)
+
+  const plan = await $.tool.call(delegate({ prompt: 'work', model: 'zai-coding-plan/glm-5.3' }) as any)
+  expect(String((plan as any).deny)).toContain('5/5 model calls')
+  expect(spawned.length).toBe(0)
+
+  const go = await $.tool.call(delegate({ prompt: 'work', model: 'kimi-k3' }) as any)
+  expect((go as any).deny).toBeUndefined()
+  expect(spawned.length).toBe(1)
+})
+
+test('a run on a plan model records its model calls, and the daily budget does not block it', { options: { dailyBudget: 1 } }, async ($, on) => {
+  const store = new Map<string, unknown>([['spendDaily', { date: localDate(Date.now()), usd: 5 }]])
+  const spawned: SpawnCall[] = []
+  engine(on, { store, spawned, models: ZAI_MODELS })
+  await start($)
+
+  const plan = await $.tool.call(delegate({ prompt: 'work', model: 'zai-coding-plan/glm-5.3' }) as any)
+  expect((plan as any).deny).toBeUndefined()
+  expect(spawned.length).toBe(1)
+  const uses = store.get('planUse') as { calls: number }[]
+  expect(uses.map(u => u.calls)).toEqual([1])
+})
+
 test('cancel(job id) stops a running resume as cancelled', { options: { autoRetries: 0 } }, async ($, on) => {
   let started!: () => void
   const running = new Promise<void>(resolve => (started = resolve))

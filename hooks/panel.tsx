@@ -1,7 +1,8 @@
 import type { ElementTable, RenderElement, RenderSurface } from 'claude-code'
 
-import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, LocalServer, ModelHealth, Phase, Preset, Preview, Spend, WorkerModel } from '../types'
+import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, LocalServer, ModelHealth, Phase, PlanUse, Preset, Preview, Spend, WorkerModel } from '../types'
 import { colorOf, isFree, isPlan, price, worker } from './catalog'
+import { quotaText } from './quota'
 import { cancel } from './control'
 import { repoOf } from './git'
 import type { TaskAction } from './git'
@@ -28,6 +29,8 @@ export type PanelView = {
   byModel: Record<string, number>
   shownPreview: Preview | null
   localNow: Record<string, LocalServer>
+  planUses: PlanUse[]
+  planQuota: number
 }
 
 // The panel's buttons, as callbacks register.tsx builds around `$`.
@@ -477,7 +480,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
 
       {(!isMobile || allOpen) && section('free', 'FREE', 'success', 'No cost while OpenCode offers them', free, m => (m.source === 'go' ? 'Go' : 'Zen'))}
       {(!isMobile || allOpen) && section('paid', 'PAID', 'warning', 'Uses your Go allowance · $ in/out per Mtok', paid, m => `${price(m.input)}/${price(m.output)}`)}
-      {(!isMobile || allOpen) && section('zai', 'Z.AI PLAN', 'suggestion', 'Uses your Z.AI Coding Plan quota · no per-token cost', plan, m => (m.id.startsWith('zhipuai') ? 'bigmodel.cn' : 'z.ai'))}
+      {(!isMobile || allOpen) && section('zai', 'Z.AI PLAN', 'suggestion', `Uses your Z.AI Coding Plan quota · ${quotaText(v.planUses, v.planQuota, Date.now())}`, plan, m => (m.id.startsWith('zhipuai') ? 'bigmodel.cn' : 'z.ai'))}
 
       <Button key="refresh" plain dimColor onPress={() => act.refresh()}>
         ↻ Refresh models

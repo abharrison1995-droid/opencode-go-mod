@@ -8,6 +8,10 @@ export type Run = {
   tools: string[]
   errors: string[]
   cost: number
+  /** model calls (step_finish events) */
+  steps?: number
+  /** model calls per model id, across a resilient run's attempts */
+  calls?: Record<string, number>
 }
 
 export type RunEnd = { code: number | null; signal: string | null }
@@ -118,6 +122,7 @@ export function readEvent(run: Run, line: string) {
     const shown = String(title).length > 100 ? `…${String(title).slice(-99)}` : String(title)
     run.tools.push(`${part.tool ?? 'tool'}${shown ? `: ${shown}` : ''}`)
   } else if (ev.type === 'step_finish' || part.type === 'step-finish') {
+    run.steps = (run.steps ?? 0) + 1
     if (typeof part.cost === 'number') run.cost += part.cost
   } else if (ev.type === 'error') {
     run.errors.push(ev.error?.data?.message ?? ev.error?.message ?? JSON.stringify(ev.error ?? ev))
@@ -316,6 +321,7 @@ export async function runResilient(
     })
     const result = await runOpencode($, argv, o.cwd, onProgress, { stallMs: o.stallMs, signal: o.signal })
     merge(merged, result.run)
+    merged.calls = { ...merged.calls, [nextModel]: (merged.calls?.[nextModel] ?? 0) + (result.run.steps ?? 0) }
     end = result.end
     stderr = result.stderr
     if (result.run.sessionId !== undefined) sessionId = result.run.sessionId
