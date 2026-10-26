@@ -1,8 +1,8 @@
 import type { ElementTable, RenderElement, RenderSurface } from 'claude-code'
 
 import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, LocalServer, ModelHealth, Phase, PlanUse, Preset, Preview, Spend, WorkerModel } from '../types'
-import { colorOf, isFree, isPlan, price, worker } from './catalog'
-import { quotaText } from './quota'
+import { colorOf, isFree, isGemini, isPlan, price, worker } from './catalog'
+import { quotaText, usedIn } from './quota'
 import { cancel } from './control'
 import { repoOf } from './git'
 import type { TaskAction } from './git'
@@ -31,6 +31,8 @@ export type PanelView = {
   localNow: Record<string, LocalServer>
   planUses: PlanUse[]
   planQuota: number
+  /** Google AI Pro (Antigravity) runs in the last 5 hours */
+  geminiUses?: PlanUse[]
 }
 
 // The panel's buttons, as callbacks register.tsx builds around `$`.
@@ -100,7 +102,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
   const { cat, model, level, isChat, running, liveBatches, money, spendTotal, recentIds, allOpen, folds, healthData, historyList, byModel, shownPreview, localNow } = v
   const search = v.query.trim().toLowerCase()
   const selected = cat.models.find(m => m.id === model)
-  const { free, paid, plan } = worker(cat.models)
+  const { free, paid, plan, gemini } = worker(cat.models)
   const isMobile = surface === 'mobile'
   const recentModels = recentIds
     .map(id => cat.models.find(m => m.id === id))
@@ -162,7 +164,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
     )
   }
 
-  const section = (key: string, title: string, color: 'success' | 'warning' | 'suggestion', hint: string, list: WorkerModel[], chip: (m: WorkerModel) => string) => {
+  const section = (key: string, title: string, color: 'success' | 'warning' | 'suggestion' | `#${string}`, hint: string, list: WorkerModel[], chip: (m: WorkerModel) => string) => {
     const shown = list.filter(matches)
     if (shown.length === 0) return undefined
     const sectionOpen = isOpen(key, true)
@@ -225,7 +227,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
         <Text dimColor>
           {selected?.maker ? `${selected.maker} · ` : ''}
           {model}
-          {selected ? (isPlan(selected) ? ' · Z.AI Coding Plan' : isFree(selected) ? ' · free' : ` · ${price(selected.input)}/${price(selected.output)} per Mtok`) : ''}
+          {selected ? (isPlan(selected) ? ' · Z.AI Coding Plan' : isGemini(selected) ? ' · Google AI Pro' : isFree(selected) ? ' · free' : ` · ${price(selected.input)}/${price(selected.output)} per Mtok`) : ''}
         </Text>
         {modelHealth !== undefined && (modelRating === 'shaky' || modelRating === 'bad') && (
           <Text dimColor size="caption">
@@ -456,12 +458,12 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
       {isMobile && recentModels.length > 0 && (
         <Box flexDirection="column">
           <Text dimColor size="caption">RECENT</Text>
-          {recentModels.map(m => row(m, isPlan(m) ? 'Z.AI' : isFree(m) ? (m.source === 'go' ? 'Go' : 'Zen') : `${price(m.input)}/${price(m.output)}`))}
+          {recentModels.map(m => row(m, isPlan(m) ? 'Z.AI' : isGemini(m) ? 'Gemini' : isFree(m) ? (m.source === 'go' ? 'Go' : 'Zen') : `${price(m.input)}/${price(m.output)}`))}
         </Box>
       )}
 
       {isMobile && (
-        <Button key="showAll" plain onPress={() => act.toggleShowAll()} label={allOpen ? 'Hide all models' : `All models (${free.length + paid.length + plan.length})`} />
+        <Button key="showAll" plain onPress={() => act.toggleShowAll()} label={allOpen ? 'Hide all models' : `All models (${free.length + paid.length + plan.length + gemini.length})`} />
       )}
       {isMobile && <Text dimColor size="caption">{'Or type /opencode model <name>'}</Text>}
 
@@ -481,6 +483,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
 
       {(!isMobile || allOpen) && section('free', 'FREE', 'success', 'No cost while OpenCode offers them', free, m => (m.source === 'go' ? 'Go' : 'Zen'))}
       {(!isMobile || allOpen) && section('paid', 'PAID', 'warning', 'Uses your Go allowance · $ in/out per Mtok', paid, m => `${price(m.input)}/${price(m.output)}`)}
+      {(!isMobile || allOpen) && section('gemini', 'GEMINI', '#4285F4', `Uses your Google AI Pro plan via Antigravity · ${usedIn(v.geminiUses ?? [], Date.now())} runs in the last 5 h`, gemini, m => (m.maker === 'Google' ? 'AI Pro' : m.maker))}
       {(!isMobile || allOpen) && section('zai', 'Z.AI PLAN', 'suggestion', `Uses your Z.AI Coding Plan quota · ${quotaText(v.planUses, v.planQuota, Date.now())}`, plan, m => (m.id.startsWith('zhipuai') ? 'bigmodel.cn' : 'z.ai'))}
 
       <Button key="refresh" plain dimColor onPress={() => act.refresh()}>

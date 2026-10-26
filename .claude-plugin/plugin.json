@@ -47,8 +47,8 @@
     "reviewModel": {
       "type": "string",
       "title": "Review model",
-      "description": "Model that reviews batch tasks when delegate_batch is called with review: true. A free model is enough.",
-      "default": "opencode/deepseek-v4.1-flash-free"
+      "description": "Model that reviews batch tasks (delegate_batch with review: true, or goal mode). auto: Gemini when the Google AI Pro plan is connected through Antigravity, else a free model.",
+      "default": "auto"
     },
     "zaiQuota": {
       "type": "number",

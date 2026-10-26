@@ -14,6 +14,10 @@ export type ReviewOptions = {
   stallMs: number
   fallback?: string
   signal?: AbortSignal
+  // What to compare, when not the task's branch against base (the final check of a merged batch).
+  rev?: string
+  // The reviewer's instructions for the diff, in place of the task review's.
+  ask?: (diff: string) => string
 }
 
 export type Review = { verdict: 'ok' | 'concerns' | 'error'; notes: string; cost: number; model: string }
@@ -47,7 +51,7 @@ function reviewPrompt(prompt: string, diff: string): string {
 // A second, read-only worker checks a finished task's diff against its prompt, so Claude
 // reads only the flagged parts.
 export async function reviewTask($: EngineInterface, o: ReviewOptions): Promise<Review> {
-  const rev = `${o.base}...HEAD`
+  const rev = o.rev ?? `${o.base}...HEAD`
   const stat = await gitAt($, ['git', '-C', o.dir, 'diff', '--stat', rev])
   const diff = await gitAt($, ['git', '-C', o.dir, 'diff', rev])
   const changes = [stat.stdout.trim(), diff.stdout.trim()].filter(text => text !== '').join('\n\n')
@@ -60,7 +64,7 @@ export async function reviewTask($: EngineInterface, o: ReviewOptions): Promise<
       model: o.model,
       level: o.level,
       fallback: o.fallback,
-      prompt: reviewPrompt(o.prompt, cutDiff(changes)),
+      prompt: (o.ask ?? (diff => reviewPrompt(o.prompt, diff)))(cutDiff(changes)),
       cwd: o.dir,
       readOnly: true,
       retries: o.retries,

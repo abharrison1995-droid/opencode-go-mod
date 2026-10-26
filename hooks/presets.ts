@@ -1,4 +1,5 @@
 import type { Effort, ModelHealth, Preset, WorkerModel } from '../types'
+import { geminiChecker } from './gemini'
 
 export const PRESETS: Preset[] = [
   { name: 'cheap', model: 'opencode/deepseek-v4.1-flash-free', effort: 'low', note: 'free, best effort: free endpoints rate-limit and stall' },
@@ -16,10 +17,15 @@ export function planPreset(models: WorkerModel[]): Preset | undefined {
   return pick && { name: 'plan', model: pick.id, effort: 'high', note: 'your Z.AI Coding Plan: no per-token cost, uses its 5-hour quota' }
 }
 
-/** The presets on offer: the fixed ones, and plan when the Z.AI Coding Plan is connected. */
+// The `gemini` preset: Gemini 4 Argon on the user's Google AI Pro plan, through Antigravity.
+export function geminiPreset(models: WorkerModel[]): Preset | undefined {
+  const pick = geminiChecker(models)
+  return pick && { name: 'gemini', model: pick.model, effort: pick.effort, note: 'your Google AI Pro plan via Antigravity: no per-token cost, uses its quota' }
+}
+
+/** The presets on offer: the fixed ones, plus plan and gemini when those subscriptions are connected. */
 export function presetsFor(models: WorkerModel[]): Preset[] {
-  const plan = planPreset(models)
-  return plan === undefined ? PRESETS : [...PRESETS, plan]
+  return [...PRESETS, ...[planPreset(models), geminiPreset(models)].filter((p): p is Preset => p !== undefined)]
 }
 
 export const presetIn = (models: WorkerModel[], name: string) => presetsFor(models).find(p => p.name === name.toLowerCase())

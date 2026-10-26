@@ -6,7 +6,7 @@ export type WorkerModel = {
   id: string
   name: string
   /** opencode-go/* is Go; opencode/* is Zen; zai-coding-plan/* and zhipuai-coding-plan/* are the Z.AI Coding Plan */
-  source: 'go' | 'zen' | 'zai'
+  source: 'go' | 'zen' | 'zai' | 'gemini'
   /** who makes the model (Moonshot AI, Z.ai, ...) */
   maker: string
   /** USD per million tokens */
@@ -133,7 +133,7 @@ export type LocalServer = { status: 'off' | 'starting' | 'ready' | 'error'; erro
 export type DelegateInput = {
   prompt: string
   model?: string
-  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder' | 'plan'
+  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder' | 'plan' | 'gemini'
   effort?: Effort
   dir?: string
   sessionId?: string
@@ -151,7 +151,7 @@ export type DelegateBatchTask = {
   prompt: string
   title?: string
   model?: string
-  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder' | 'plan'
+  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder' | 'plan' | 'gemini'
   effort?: Effort
   readOnly?: boolean
   dependsOn?: string[]
@@ -163,13 +163,16 @@ export type DelegateBatchTask = {
 /** delegate_batch's arguments. */
 export type DelegateBatchInput = {
   title: string
-  tasks: DelegateBatchTask[]
+  /** Optional when goal is given: Gemini plans them. */
+  tasks?: DelegateBatchTask[]
+  /** What the batch should achieve: Gemini splits it into tasks, reviews each and checks the merged result. */
+  goal?: string
   shared?: string
   files?: string[]
   verify?: string
   verifyRounds?: number
   maxCost?: number
-  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder' | 'plan'
+  profile?: 'cheap' | 'reliable' | 'strong' | 'ladder' | 'plan' | 'gemini'
   autoMerge?: boolean
   autoResolve?: boolean
   review?: boolean
@@ -231,6 +234,8 @@ declare module 'claude-code' {
       local: Record<string, LocalServer>
       /** Z.AI Coding Plan model calls in the last 5 hours (also in $.store 'planUse') */
       planUse: PlanUse[]
+      /** Google AI Pro (Antigravity) runs in the last 5 hours (also in $.store 'geminiUse') */
+      geminiUse: PlanUse[]
     }
   }
 }

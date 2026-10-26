@@ -159,7 +159,7 @@ test('sourcesCheck counts each source and fails with no Go or Zen model', () => 
   expect(sourcesCheck([worker('opencode-go/a', 'go'), worker('opencode/b', 'zen'), worker('zai-coding-plan/c', 'zai')])).toEqual({
     name: 'model sources',
     ok: true,
-    detail: 'Go 1 · Zen 1 · Z.AI 1',
+    detail: 'Go 1 · Zen 1 · Z.AI 1 · Gemini 0',
   })
   expect(sourcesCheck([worker('zai-coding-plan/c', 'zai')]).ok).toBe(false)
 })
@@ -178,7 +178,7 @@ test('local models are skipped when not installed and reported when running', as
   fake.$.http = { fetch: async (url: string) => ({ ok: url.includes(':8009') }) }
   const checks = await selfTest(fake.$, { bin: '/usr/bin/opencode', dir: '/proj', models: [worker('opencode-go/a', 'go')], local: LOCAL_OPTS })
 
-  expect(checks.map(c => c.name)).toEqual([...names.slice(0, 6), 'model sources', 'Z.AI Coding Plan', 'Kev', 'Laya', 'report folder'])
+  expect(checks.map(c => c.name)).toEqual([...names.slice(0, 6), 'model sources', 'Z.AI Coding Plan', 'Google AI Pro (Antigravity)', 'Kev', 'Laya', 'report folder'])
   expect(checks[8]).toEqual({ name: 'Kev', ok: true, detail: 'running on :8009' })
   expect(checks[9]).toMatchObject({ name: 'Laya', skipped: true })
   expect(checks[9]!.detail).toContain('/models/laya-env/bin/laya-serve')

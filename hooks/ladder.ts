@@ -1,6 +1,6 @@
 import type { Effort, ModelHealth, WorkerModel } from '../types'
 import { isFree } from './catalog'
-import { planPreset, presetNamed, rate } from './presets'
+import { geminiPreset, planPreset, presetNamed, rate } from './presets'
 
 export type Rung = { model: string; effort?: Effort; retries?: number }
 
@@ -8,7 +8,8 @@ const runs = (h: ModelHealth) => h.ok + h.failed + h.rateLimited + h.hung
 
 // The `ladder` profile: the models a run climbs, cheapest first. The first rung is the
 // starting model; runResilient moves to the next after the current one's retries fail.
-// planOk: whether the Z.AI Coding Plan's quota has room; its rung sits between the free and paid ones.
+// The subscriptions' rungs sit between the free and paid ones: Gemini (Google AI Pro), then the
+// Z.AI Coding Plan when planOk, its quota having room.
 export function ladder(models: WorkerModel[], health: Record<string, ModelHealth>, planOk = true): Rung[] {
   const free = models
     .map((m, i) => ({ m, i }))
@@ -29,6 +30,8 @@ export function ladder(models: WorkerModel[], health: Record<string, ModelHealth
   const add = (model: string, effort?: Effort) => {
     if (!rungs.some(r => r.model === model)) rungs.push({ model, effort })
   }
+  const gemini = geminiPreset(models)
+  if (gemini !== undefined && rate(health[gemini.model]) !== 'bad') rungs.push({ model: gemini.model, effort: gemini.effort, retries: 1 })
   const plan = planPreset(models)
   if (plan !== undefined && planOk && rate(health[plan.model]) !== 'bad') rungs.push({ model: plan.model, effort: plan.effort, retries: 1 })
   const reliable = presetNamed('reliable')
