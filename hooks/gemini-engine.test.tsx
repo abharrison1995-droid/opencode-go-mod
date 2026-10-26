@@ -44,7 +44,7 @@ function engine(on: any, o: Options = {}) {
   on('store.set', (_: any, e: any) => (store.set(e.key, e.value), { value: undefined }))
   on('env.get', (_: any, e: any) => ({ value: e.name === 'HOME' ? '/home/test' : undefined }))
   // The per-run agy log names the conversation it started.
-  on('fs.read', (_: any, e: any) => ({ value: String(e.path).includes('/.cache/opencode-go/agy-') ? `I1026 server.go:1225] Created conversation ${CONVERSATION} (backend=X)\n` : undefined }))
+  on('fs.read', (_: any, e: any) => ({ value: /[\\/]\.cache[\\/]opencode-go[\\/]agy-/.test(String(e.path)) ? `I1026 server.go:1225] Created conversation ${CONVERSATION} (backend=X)\n` : undefined }))
   on('fs.write', () => ({ value: undefined }))
   on('fs.stat', () => ({ value: undefined }))
   on('session.messages', () => ({ value: [] }))

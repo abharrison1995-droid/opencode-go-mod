@@ -27,6 +27,7 @@ import { resolveConflict } from './resolve'
 import { reviewTask } from './review'
 import { formatChecks, selfTest } from './selftest'
 import { planCalls, prune, quotaMessage, resetAt, usedIn } from './quota'
+import { homeOf } from './platform'
 
 const catalog = atom({ plugin: 'opencode-go', key: 'catalog' } as const, { status: 'loading', models: [] } as Catalog)
 const picked = atom({ plugin: 'opencode-go', key: 'model' } as const, '')
@@ -329,8 +330,7 @@ Use it for cheap, repeatable judgements: triage, routing, classifying files or m
 }
 
 async function homeDir($: EngineInterface) {
-  const { stdout } = await $.process.run(['printenv', 'HOME'])
-  return stdout.trim()
+  return (await homeOf($)) ?? ''
 }
 
 async function setLocal($: EngineInterface, name: LocalName, patch: Partial<LocalServer>) {

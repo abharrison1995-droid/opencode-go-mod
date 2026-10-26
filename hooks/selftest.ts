@@ -4,6 +4,7 @@ import type { WorkerModel } from '../types'
 import { runOpencode } from './delegate'
 import { LOCAL, ping } from './local'
 import type { LocalOptions, LocalSpec } from './local'
+import { shArgv } from './platform'
 
 /** skipped: an optional part that is not set up here, counted neither as passed nor failed. */
 export type Check = { name: string; ok: boolean; detail: string; skipped?: boolean }
@@ -14,6 +15,11 @@ async function ignoreRun() {}
 
 function message(err: unknown): string {
   return err instanceof Error ? err.message : String(err)
+}
+
+// Without a sh (Windows without Git for Windows) the plain argv fails to start and its check fails.
+async function shell($: EngineInterface, script: string): Promise<string[]> {
+  return (await shArgv($, script)) ?? ['sh', '-c', script]
 }
 
 function shQuote(text: string): string {
@@ -93,7 +99,7 @@ export async function selfTest($: EngineInterface, o: { bin?: string; dir: strin
   checks.push(
     await guard('hang watchdog', async () => {
       const started = Date.now()
-      const result = await runOpencode($, ['sh', '-c', 'sleep 30'], o.dir, ignoreRun, { stallMs: 2000 })
+      const result = await runOpencode($, await shell($, 'sleep 30'), o.dir, ignoreRun, { stallMs: 2000 })
       const seconds = (Date.now() - started) / 1000
       return { ok: result.reason === 'hung' && seconds < 10, detail: `${result.reason} in ${seconds.toFixed(1)}s` }
     }),
@@ -102,7 +108,7 @@ export async function selfTest($: EngineInterface, o: { bin?: string; dir: strin
   checks.push(
     await guard('rate-limit detection', async () => {
       const event = eventLine({ type: 'error', error: { data: { message: '429 Too Many Requests' } } })
-      const result = await runOpencode($, ['sh', '-c', `printf '%s\\n' ${shQuote(event)}; exit 1`], o.dir, ignoreRun, { stallMs: VERSION_TIMEOUT })
+      const result = await runOpencode($, await shell($, `printf '%s\\n' ${shQuote(event)}; exit 1`), o.dir, ignoreRun, { stallMs: VERSION_TIMEOUT })
       return { ok: result.reason === 'rate-limited', detail: result.reason }
     }),
   )
@@ -111,7 +117,7 @@ export async function selfTest($: EngineInterface, o: { bin?: string; dir: strin
     await guard('normal run', async () => {
       const text = eventLine({ type: 'text', part: { type: 'text', text: 'self-test text' } })
       const finish = eventLine({ type: 'step_finish', part: { type: 'step-finish', cost: 0.001 } })
-      const result = await runOpencode($, ['sh', '-c', `printf '%s\\n' ${shQuote(text)} ${shQuote(finish)}; exit 0`], o.dir, ignoreRun, {
+      const result = await runOpencode($, await shell($, `printf '%s\\n' ${shQuote(text)} ${shQuote(finish)}; exit 0`), o.dir, ignoreRun, {
         stallMs: VERSION_TIMEOUT,
       })
       return {

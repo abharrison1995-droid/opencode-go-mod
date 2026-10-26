@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { Phase, WorkerModel } from '../types'
 import { AGY_STALL_MS, agyArgv, conversationIn, findAgy, isAgyId } from './gemini'
+import { homeOf, isAbsolute, posixArgv, shArgv } from './platform'
 
 export type Run = {
   text: string
@@ -88,20 +89,24 @@ export function buildArgv(
   ]
 }
 
+// The root an absolute path starts with: `/`, or a Windows drive's `C:/`.
+const rootOf = (path: string) => (/^[A-Za-z]:[\\/]/.test(path) ? `${path.slice(0, 2)}/` : /^[\\/]/.test(path) ? '/' : '')
+
 // Pure string code: no Node path module is available to a mod.
 export function resolveDir(base: string, dir?: string): string | undefined {
   if (dir === undefined) return undefined
-  const joined = dir.startsWith('/') ? dir : base === '' ? dir : `${base}/${dir}`
+  const joined = isAbsolute(dir) ? dir : base === '' ? dir : `${base}/${dir}`
+  const root = rootOf(joined)
   const parts: string[] = []
-  for (const part of joined.split('/')) {
+  for (const part of joined.slice(root.length).split(/[\\/]/)) {
     if (part === '' || part === '.') continue
     if (part === '..') {
       if (parts.length > 0 && parts.at(-1) !== '..') parts.pop()
-      else if (!joined.startsWith('/')) parts.push('..')
+      else if (root === '') parts.push('..')
     } else parts.push(part)
   }
   const out = parts.join('/')
-  if (joined.startsWith('/')) return `/${out}`
+  if (root !== '') return `${root}${out}`
   return out === '' ? '.' : out
 }
 
@@ -169,7 +174,7 @@ export async function runOpencode(
   const host = timers()
   // opencode takes its project folder from $PWD before its real cwd, and a spawn inherits the
   // host's $PWD, so without this every worker would start in the folder Claude Code started in.
-  const env = cwd !== undefined && cwd.startsWith('/') ? { PWD: cwd } : undefined
+  const env = cwd !== undefined && isAbsolute(cwd) ? { PWD: cwd } : undefined
   const stream = $.process.spawn(env === undefined ? { argv, cwd } : { argv, cwd, env })[Symbol.asyncIterator]()
   while (!cancelled) {
     if (o.signal?.aborted === true) {
@@ -279,10 +284,10 @@ async function runAgy(
     const run: Run = { text: '', tools: [], errors: ['The Antigravity CLI (agy) is not installed or not on PATH.'], cost: 0 }
     return { run, end: { code: 127, signal: null }, stderr: '', reason: 'failed' }
   }
-  const home = (await $.env.get('HOME')) ?? '/tmp'
+  const home = (await homeOf($)) ?? '/tmp'
   const folder = `${home}/.cache/opencode-go`
   const logFile = `${folder}/agy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.log`
-  await $.process.run(['mkdir', '-p', folder]).catch(() => undefined)
+  await $.process.run(await posixArgv($, ['mkdir', '-p', folder])).catch(() => undefined)
   const argv = agyArgv(bin, { model: o.model, level: o.level, sessionId: o.sessionId, readOnly: o.readOnly, files: o.files, prompt: o.prompt, logFile })
   try {
     const result = await runOpencode($, argv, o.cwd, onProgress, { stallMs: Math.max(o.stallMs, AGY_STALL_MS), signal: o.signal, format: 'text' })
@@ -292,7 +297,7 @@ async function runAgy(
     result.run.steps = 1
     return result
   } finally {
-    await $.process.run(['rm', '-f', logFile]).catch(() => undefined)
+    await $.process.run(await posixArgv($, ['rm', '-f', logFile])).catch(() => undefined)
   }
 }
 
@@ -313,7 +318,9 @@ export function verifyPrompt(command: string, output: string): string {
 }
 
 async function runVerify($: EngineInterface, command: string, cwd: string | undefined): Promise<{ passed: boolean; output: string }> {
-  const result = await $.process.run(['sh', '-c', command], { cwd, timeoutMs: 600_000 }).catch(err => ({
+  // Windows without Git for Windows has no sh: cmd runs the check instead.
+  const argv = (await shArgv($, command)) ?? ['cmd.exe', '/d', '/s', '/c', command]
+  const result = await $.process.run(argv, { cwd, timeoutMs: 600_000 }).catch(err => ({
     exitCode: 1,
     stdout: '',
     stderr: err instanceof Error ? err.message : String(err),

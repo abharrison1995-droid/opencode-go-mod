@@ -46,6 +46,7 @@ function fakeEngine(o: Options = {}) {
   const writes: WriteCall[] = []
   const notified: string[] = []
   const $: any = {
+    env: { get: async () => undefined },
     process: {
       run: async (argv: string[], init?: any) => {
         runs.push({ argv: [...argv], init })

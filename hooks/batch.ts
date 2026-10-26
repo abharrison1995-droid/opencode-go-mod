@@ -1,6 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { Batch, BatchTask, Effort } from '../types'
+import { posixArgv } from './platform'
 
 export type BatchTaskSpec = {
   id: string
@@ -133,9 +134,9 @@ async function makeDir(
 
   if (mode === 'copy') {
     const dir = `${base}-opencode/${batchId}-${taskId}`
-    const made = await git($, ['mkdir', '-p', dir])
+    const made = await git($, await posixArgv($, ['mkdir', '-p', dir]))
     if (made.exitCode !== 0) throw new Error(made.stderr.trim() || `mkdir -p ${dir} failed`)
-    const copied = await git($, ['cp', '-a', `${base}/.`, dir])
+    const copied = await git($, await posixArgv($, ['cp', '-a', `${base}/.`, dir]))
     if (copied.exitCode !== 0) throw new Error(copied.stderr.trim() || `cp -a ${base} failed`)
     return { dir }
   }

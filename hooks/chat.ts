@@ -1,6 +1,7 @@
 import type { EngineInterface, SessionMessage } from 'claude-code'
 
 import type { Effort, WorkerModel } from '../types'
+import { homeOf } from './platform'
 
 // Chat mode answers a turn's model request through OpenCode Go's Anthropic Messages endpoint.
 // OpenCode lists Claude Code as a validated Go client; Zen's free tier serves only OpenCode itself,
@@ -115,7 +116,7 @@ export function toMessages(transcript: readonly SessionMessage[]): Msg[] {
 }
 
 export async function readKey($: EngineInterface): Promise<string | undefined> {
-  const data = (await $.env.get('XDG_DATA_HOME')) ?? `${await $.env.get('HOME')}/.local/share`
+  const data = (await $.env.get('XDG_DATA_HOME')) ?? `${await homeOf($)}/.local/share`
   const text = await $.fs.read(`${data}/opencode/auth.json`).catch(() => undefined)
   if (typeof text !== 'string') return undefined
   try {
