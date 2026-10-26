@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.1]
+
+### Added
+
+- `delegate_batch` takes `checker` and `checkerEffort`: the model that plans goal mode, reviews tasks and checks the merged result (e.g. `agy/gemini-3.8-flash` at high). Default: Gemini 4 Argon.
+
 ## [0.11.0]
 
 ### Added

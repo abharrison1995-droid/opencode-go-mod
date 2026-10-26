@@ -110,6 +110,18 @@ export function geminiChecker(models: WorkerModel[]): { model: string; effort: E
   return pick && { model: pick.id, effort: pick.efforts.includes('high') ? 'high' : 'medium' }
 }
 
+/** The checker a call names (a bare id is taken as agy's), else geminiChecker's pick. */
+export function pickChecker(models: WorkerModel[], model?: string, effort?: Effort): { model: string; effort: Effort } | undefined {
+  if (typeof model !== 'string' || model.trim() === '') {
+    const pick = geminiChecker(models)
+    return pick && effort !== undefined ? { ...pick, effort } : pick
+  }
+  const id = model.includes('/') ? model.trim() : `${AGY_PREFIX}${model.trim()}`
+  const known = models.find(m => m.id === id)
+  const fallback: Effort = known === undefined || known.efforts.includes('high') ? 'high' : 'medium'
+  return { model: id, effort: effort ?? fallback }
+}
+
 export const NO_GEMINI =
   'Gemini runs through the Antigravity CLI signed in to the Google AI Pro plan, and it lists no Gemini models. Ask the user to install it (curl -fsSL https://antigravity.google/cli/install.sh | bash), run `agy` once to sign in, then press ↻ Refresh models in the OpenCode panel.'
 

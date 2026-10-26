@@ -90,7 +90,7 @@ Run `agy` once to sign in, then press ↻ Refresh models in the OpenCode panel. 
 - Batch reviews (`review: true`) use Gemini when it is connected (the `reviewModel` option's `auto`), else a free model.
 - A run that hits the plan's quota is rate-limited, resumes its agy conversation, and falls back like any other.
 
-**Goal mode: Gemini orchestrates and checks.** Call `delegate_batch` with a `goal` instead of `tasks`. Gemini reads the folder and splits the goal into tasks (at most 6, with dependencies and verify commands); the workers run them; Gemini reviews each task's diff; passing tasks merge into `oc/<batch>-merged`; and Gemini checks the merged result against the goal. Claude makes one call and reads one report. `profile: "gemini"` runs the workers on Gemini too.
+**Goal mode: Gemini orchestrates and checks.** Call `delegate_batch` with a `goal` instead of `tasks`. Gemini reads the folder and splits the goal into tasks (at most 6, with dependencies and verify commands); the workers run them; Gemini reviews each task's diff; passing tasks merge into `oc/<batch>-merged`; and Gemini checks the merged result against the goal. Claude makes one call and reads one report. `profile: "gemini"` runs the workers on Gemini too. `checker` (and `checkerEffort`) picks the model that plans, reviews and checks, e.g. `agy/gemini-3.8-flash` for a faster, lighter checker; the default is Gemini 4 Argon at high.
 
 Headless agy cannot ask for permission, so the mod runs it with `--dangerously-skip-permissions --sandbox`. The sandbox keeps credential folders (such as `~/.docker` and `~/.kube`) away from its commands, but it does not stop writes elsewhere in your home folder: give editing tasks a git repo, where batches work in worktrees.
 
