@@ -37,6 +37,7 @@ type Options = {
 // it, so direct calls get this instead.
 function fakeEngine(o: Options = {}) {
   return {
+    env: { get: async () => undefined },
     process: {
       run: async (argv: string[]) => {
         o.runs?.push([...argv])

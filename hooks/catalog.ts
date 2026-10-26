@@ -2,6 +2,7 @@ import type { EngineInterface } from 'claude-code'
 
 import type { Catalog, WorkerModel } from '../types'
 import { loadAgyModels } from './gemini'
+import { dirOf, homeOf, isExe, isWindows, whereAll } from './platform'
 
 // A Z.AI Coding Plan model lists $0 but draws on the plan's prompt quota, so it is neither free nor paid.
 export const isPlan = (m: WorkerModel) => m.source === 'zai'
@@ -55,7 +56,25 @@ export const MAKER_COLORS: Record<string, string> = {
 
 export const colorOf = (id: string) => MAKER_COLORS[makerOf(id)] ?? 'subtle'
 
+// npm installs opencode on Windows as a .cmd shim, which a spawn cannot start: the .exe it calls can.
+async function findOpencodeExe($: EngineInterface): Promise<string | undefined> {
+  const hits = await whereAll($, 'opencode')
+  const home = await homeOf($)
+  const appData = await $.env.get('APPDATA')
+  const paths = [
+    ...hits.filter(isExe),
+    ...hits.map(hit => `${dirOf(hit)}/node_modules/opencode-ai/bin/opencode.exe`),
+    ...(appData === undefined ? [] : [`${appData}/npm/node_modules/opencode-ai/bin/opencode.exe`]),
+    ...(home === undefined ? [] : [`${home}/.opencode/bin/opencode.exe`]),
+  ]
+  for (const path of paths) {
+    if ((await $.fs.stat(path).catch(() => undefined)) !== undefined) return path
+  }
+  return undefined
+}
+
 export async function findOpencode($: EngineInterface): Promise<string | undefined> {
+  if (await isWindows($)) return findOpencodeExe($)
   const which = await $.process.run(['sh', '-c', 'command -v opencode'])
   if (which.exitCode === 0 && which.stdout.trim() !== '') return which.stdout.trim()
   const home = await $.env.get('HOME')

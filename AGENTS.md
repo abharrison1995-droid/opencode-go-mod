@@ -37,6 +37,7 @@ opencode-go is a Claude Code mod (a function-hooks plugin). It lets Claude deleg
 - `hooks/quota.ts`: the Z.AI Coding Plan's 5-hour window: model calls used, when it eases, the `zaiQuota` message.
 - `hooks/chat.ts`: chat mode.
 - `hooks/control.ts`: AbortController registry for cancel.
+- `hooks/platform.ts`: Windows support: `isWindows` (from `OS`), `homeOf` (USERPROFILE there), `whereAll` (`where.exe` or `command -v`), `shArgv` and `posixArgv`, which run scripts and POSIX tools through Git for Windows' sh. A spawn runs no shell, so on Windows `findOpencode` and `findAgy` return an `.exe`, never npm's `.cmd` shim. Elsewhere every argv is unchanged.
 - `hooks/local.ts`: the local decision models (Kev, Laya) behind `decide`: `startLocal`, `askLocal`, `stopLocal`, `ping`. The servers it spawns live in a module-level map, so a reload stops them.
 - `scripts/check.sh`: every release check: validate, the tests, the scripts' tests and the type-check. `.github/workflows/check.yml` runs all but the type-check on GitHub.
 - `scripts/setup-local.sh`: installs Kev and Laya into the models folder; `/opencode local setup` prints its command.

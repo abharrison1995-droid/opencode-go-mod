@@ -144,7 +144,8 @@ test('a delegate run reports short and writes the full report to a file', async 
 
   const path = /Full report: (\S+)/.exec(report)?.[1] ?? ''
   expect(path).toMatch(/^\/proj\/\.opencode\/reports\/d-.+\.md$/)
-  const written = writes.find(w => w.path === path)
+  // On Windows the engine hands fs.write a native path, C:\proj\... for /proj/...
+  const written = writes.find(w => w.path.replace(/\\/g, '/').endsWith(path))
   expect(written).toBeDefined()
   expect(written?.text).toContain('actions (')
   expect(written?.text).toContain('answer:\ndone')
@@ -161,7 +162,7 @@ test('report full returns the long form', async ($, on) => {
   expect(report).toContain('answer:\ndone')
   expect(writes.length).toBe(2)
   expect(writes[0]!.text).toContain('actions (')
-  expect(writes[1]).toEqual({ path: expect.stringMatching(/\.opencode\/reports\/\.gitignore$/), text: '*\n' })
+  expect(writes[1]).toEqual({ path: expect.stringMatching(/\.opencode[\\/]reports[\\/]\.gitignore$/), text: '*\n' })
 })
 
 test('health records rate limits and successes, and a cancelled run changes nothing', async ($, on) => {

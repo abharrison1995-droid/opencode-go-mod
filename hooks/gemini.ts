@@ -1,6 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { Effort, WorkerModel } from '../types'
+import { isExe, isWindows, whereAll } from './platform'
 
 // Gemini (and the other models a Google AI Pro plan offers) run through the Antigravity CLI,
 // `agy`, signed in with the user's Google account: no API key and no per-token cost, drawn
@@ -19,7 +20,18 @@ const LEVELS = ['low', 'medium', 'high'] as const
 const makerOf = (bare: string) =>
   bare.startsWith('gemini') ? 'Google' : bare.startsWith('claude') ? 'Anthropic' : bare.startsWith('gpt') ? 'OpenAI' : 'Other'
 
+// agy's Windows installer puts agy.exe in %LOCALAPPDATA%\agy\bin.
+async function findAgyExe($: EngineInterface): Promise<string | undefined> {
+  const local = await $.env.get('LOCALAPPDATA')
+  const paths = [...(await whereAll($, 'agy')).filter(isExe), ...(local === undefined ? [] : [`${local}/agy/bin/agy.exe`])]
+  for (const path of paths) {
+    if ((await $.fs.stat(path).catch(() => undefined)) !== undefined) return path
+  }
+  return undefined
+}
+
 export async function findAgy($: EngineInterface): Promise<string | undefined> {
+  if (await isWindows($)) return findAgyExe($)
   const which = await $.process.run(['sh', '-c', 'command -v agy']).catch(() => undefined)
   if (which !== undefined && which.exitCode === 0 && which.stdout.trim() !== '') return which.stdout.trim()
   const home = await $.env.get('HOME')
