@@ -4,6 +4,19 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.0]
+
+### Added
+
+- Gemini on a Google AI Pro plan, through the Antigravity CLI (`agy`) signed in with your Google account: no API key and no per-token cost. Its models appear as `agy/*` in a GEMINI section of the panel, in `/opencode models gemini`, and in the delegate tools' model list, and run through `delegate` and `delegate_batch` like any other worker. Runs resume their agy conversation after a quota limit and fall back like any other; read-only runs use agy's plan mode.
+- `gemini` preset and profile (Gemini 4 Argon, high reasoning). The `ladder` profile tries Gemini after the free models.
+- Goal mode: `delegate_batch` with a `goal` instead of `tasks` has Gemini plan the tasks, review each task's diff, and check the merged result against the goal; review and autoMerge default to on.
+- Gemini runs over the last 5 hours, shown under GEMINI, and a Google AI Pro check in `/opencode selftest`.
+
+### Changed
+
+- The `reviewModel` option defaults to `auto`: Gemini when connected, else the free model as before.
+
 ## [0.10.0]
 
 ### Added

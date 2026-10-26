@@ -32,7 +32,8 @@ opencode-go is a Claude Code mod (a function-hooks plugin). It lets Claude deleg
 - `hooks/resolve.ts`: autoResolve, where a worker fixes its own merge conflict.
 - `hooks/review.ts`: a read-only reviewer that checks a task's diff.
 - `hooks/selftest.ts`: `/opencode selftest`.
-- `hooks/catalog.ts`: model list and cache, and the sources: Go, Zen, and the Z.AI Coding Plan (`isPlan`, `costsMoney`).
+- `hooks/catalog.ts`: model list and cache, and the sources: Go, Zen, the Z.AI Coding Plan (`isPlan`) and Gemini (`isGemini`); `costsMoney`.
+- `hooks/gemini.ts`: Gemini through the Antigravity CLI: `agy models` parsing, `agyArgv`, the conversation id in a run's log, and goal mode's plan and check prompts and `parsePlan`. runResilient (delegate.ts) runs any `agy/*` model through it.
 - `hooks/quota.ts`: the Z.AI Coding Plan's 5-hour window: model calls used, when it eases, the `zaiQuota` message.
 - `hooks/chat.ts`: chat mode.
 - `hooks/control.ts`: AbortController registry for cancel.

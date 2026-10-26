@@ -353,9 +353,10 @@ export async function runResilient(
     attempts++
     // A session belongs to one CLI: moving between opencode and agy starts the task afresh.
     const viaAgy = isAgyId(nextModel)
-    if (nextSession !== undefined && viaAgy !== sessionOnAgy) {
+    if (viaAgy !== sessionOnAgy) {
+      if (nextSession !== undefined) prompt = o.prompt
       nextSession = undefined
-      prompt = o.prompt
+      sessionId = undefined
     }
     const result = viaAgy
       ? await runAgy($, { ...o, model: nextModel, level: nextLevel, sessionId: nextSession, prompt }, onProgress)
