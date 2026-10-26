@@ -179,9 +179,9 @@ test('local models are skipped when not installed and reported when running', as
   const checks = await selfTest(fake.$, { bin: '/usr/bin/opencode', dir: '/proj', models: [worker('opencode-go/a', 'go')], local: LOCAL_OPTS })
 
   expect(checks.map(c => c.name)).toEqual([...names.slice(0, 6), 'model sources', 'Z.AI Coding Plan', 'Google AI Pro (Antigravity)', 'Kev', 'Laya', 'report folder'])
-  expect(checks[8]).toEqual({ name: 'Kev', ok: true, detail: 'running on :8009' })
-  expect(checks[9]).toMatchObject({ name: 'Laya', skipped: true })
-  expect(checks[9]!.detail).toContain('/models/laya-env/bin/laya-serve')
+  expect(checks[9]).toEqual({ name: 'Kev', ok: true, detail: 'running on :8009' })
+  expect(checks[10]).toMatchObject({ name: 'Laya', skipped: true })
+  expect(checks[10]!.detail).toContain('/models/laya-env/bin/laya-serve')
 })
 
 test('formatChecks leaves skipped checks out of the count', () => {
