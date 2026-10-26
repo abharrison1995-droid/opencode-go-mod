@@ -27,7 +27,7 @@ export type Catalog = {
 }
 
 /** A phase a running worker is in beyond working on its prompt; cleared when the phase ends. */
-export type Phase = 'verifying' | 'reviewing'
+export type Phase = 'verifying' | 'reviewing' | 'planning' | 'checking'
 
 /** A delegate call in flight, for the panel. */
 export type Job = { id: string; model: string; effort?: string; steps: number; last?: string; /** 1 on the first try, more after a resume or fallback */ attempt?: number; stage?: Phase }

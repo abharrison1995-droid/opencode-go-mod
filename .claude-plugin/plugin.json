@@ -1,6 +1,6 @@
 {
   "name": "opencode-go",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "license": "MIT",
   "description": "Lets Claude delegate tasks to OpenCode Go, Zen, Z.AI Coding Plan and Gemini (Google AI Pro, through Antigravity) models, picked in an OpenCode panel, have Gemini plan and check whole goals, and ask local decision models (Kev, Laya) quick questions.",
   "author": {

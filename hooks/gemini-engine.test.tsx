@@ -26,6 +26,7 @@ type Options = {
   agy?: boolean
   // What the nth agy spawn prints, and its exit code.
   agyRun?: (argv: string[], n: number) => { stdout?: string; stderr?: string; code?: number }
+  status?: (string | undefined)[]
 }
 
 function engine(on: any, o: Options = {}) {
@@ -36,7 +37,7 @@ function engine(on: any, o: Options = {}) {
   on('command.register', (_: any, e: any) => ({ value: { command: e.name } }))
   on('tool.register', (_: any, e: any) => ({ value: { tool: `mcp__opencode-go__${e.name}` } }))
   on('ui.open', () => ({ value: { isPlaced: true } }))
-  on('ui.status', () => ({ value: undefined }))
+  on('ui.status', (_: any, e: any) => (o.status?.push(e.text), { value: undefined }))
   on('ui.toast', () => ({ value: undefined }))
   on('ui.notify', () => ({ value: { isSent: true, channel: 'terminal_bell' } }))
   on('store.get', (_: any, e: any) => ({ value: store.get(e.key) }))
@@ -219,4 +220,15 @@ test('a checker named in the call plans with that model and level', async ($, on
   expect((ran as any).deny).toBeUndefined()
   expect(flag(spawned[0]!.argv, '--model')).toBe('gemini-3.8-flash-high')
   expect(String((ran as any).result)).toContain('## Plan (agy/gemini-3.8-flash)')
+})
+
+test('Gemini planning shows as a running agent, gone once the plan is in', async ($, on) => {
+  const spawned: SpawnCall[] = []
+  const status: (string | undefined)[] = []
+  engine(on, { spawned, status, agyRun: () => ({ stdout: PLAN }) })
+  await start($)
+
+  await $.tool.call(batch({ title: 'goal', goal: 'build both parts', isolation: 'none' }) as any)
+  expect(status).toContain('opencode gemini-4-argon: 0 steps · planning goal')
+  expect(status.at(-1)).toBeUndefined()
 })
