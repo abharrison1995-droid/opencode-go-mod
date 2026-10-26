@@ -5,6 +5,8 @@ import type { Batch, BatchSummary, PlanUse, BatchTask, Catalog, DecideInput, Del
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
 import { costsMoney, findOpencode, fullId, isFree, isPlan, loadCatalog, price, readCache, worker, writeCache } from './catalog'
+import { checkPrompt, geminiChecker, isAgyId, MAX_PLANNED, NO_GEMINI, parsePlan, planPrompt } from './gemini'
+import type { Plan } from './gemini'
 import { batchesText, diffText, effortText, HELP, historyText, localText, setupText, matchJob, matchModel, modelsText, parseArgs, presetsText, statusText } from './commands'
 import { chatTools, explainError, readKey, requestBody, sendWithRetry, toMessages } from './chat'
 import { cancel, track, tracked, untrack } from './control'
@@ -18,7 +20,7 @@ import type { LocalOptions, LocalSpec } from './local'
 import type { Rung } from './ladder'
 import { panel } from './panel'
 import type { PanelView } from './panel'
-import { EFFORTS, NO_PLAN, planPreset, presetIn, presetNamed, presetsFor, rate } from './presets'
+import { EFFORTS, geminiPreset, NO_PLAN, planPreset, presetIn, presetNamed, presetsFor, rate } from './presets'
 import { batchReport, batchShortReport, changedFiles, delegateShort, writeReport } from './report'
 import type { ReportExtras } from './report'
 import { resolveConflict } from './resolve'
@@ -44,6 +46,7 @@ const spendByModel = atom({ plugin: 'opencode-go', key: 'spendByModel' } as cons
 const preview = atom({ plugin: 'opencode-go', key: 'preview' } as const, null as Preview | null)
 const local = atom({ plugin: 'opencode-go', key: 'local' } as const, {} as Record<string, LocalServer>)
 const planUse = atom({ plugin: 'opencode-go', key: 'planUse' } as const, [] as PlanUse[])
+const geminiUse = atom({ plugin: 'opencode-go', key: 'geminiUse' } as const, [] as PlanUse[])
 
 const TOOL = 'mcp__opencode-go__delegate'
 const BATCH_TOOL = 'mcp__opencode-go__delegate_batch'
@@ -53,12 +56,12 @@ const PANE = 'opencode'
 let sessionCwd = ''
 
 function describe(models: WorkerModel[], health: Record<string, ModelHealth> = {}) {
-  const { free, paid, plan } = worker(models)
+  const { free, paid, plan, gemini } = worker(models)
   const shown = paid.slice(0, 8).map(m => `${m.id} (${price(m.input)}/${price(m.output)})`).join(', ')
   const more = paid.length > 8 ? `, and ${paid.length - 8} more in the OpenCode panel` : ''
   const shaky = (id: string) => (rate(health[id]) === 'shaky' ? ' (shaky)' : '')
-  const unreliable = [...free, ...paid, ...plan].filter(m => rate(health[m.id]) === 'bad').map(m => m.id)
-  return `Delegate a self-contained task to a cheaper model through opencode (the user's OpenCode Go subscription, Zen's free models, or their Z.AI Coding Plan), run as a full opencode agent (it can read, edit and run commands in the given directory), and wait for its answer.
+  const unreliable = [...free, ...paid, ...plan, ...gemini].filter(m => rate(health[m.id]) === 'bad').map(m => m.id)
+  return `Delegate a self-contained task to a cheaper model through opencode (the user's OpenCode Go subscription, Zen's free models, or their Z.AI Coding Plan) or Antigravity (their Google AI Pro plan's Gemini models, agy/*), run as a full agent (it can read, edit and run commands in the given directory), and wait for its answer.
 
 Use it for routine, well-specified work: boilerplate, bulk edits, writing tests to a clear spec, summarising files, first drafts, mechanical refactors. Keep planning, judgement and review for yourself, and check what it changed (git diff, tests) before reporting success.
 
@@ -66,16 +69,16 @@ The worker sees nothing of this conversation: put everything it needs in the pro
 
 Give every coding task a verify command (e.g. npm test) so failures are fixed by the worker, not by you. Runs resume themselves after rate limits, hangs and failures, and fall back to the fallback model. The user can cancel a run from the OpenCode panel.
 
-Set profile to cheap, reliable or strong to pick a preset model and reasoning level, plan for the user's Z.AI Coding Plan, or ladder to start on a healthy free model and escalate (through the Z.AI Coding Plan, when connected) to paid ones if it fails (an explicit model or effort wins). Report defaults to short with the full report in a file; pass full to read it inline.
+Set profile to cheap, reliable or strong to pick a preset model and reasoning level, plan for the user's Z.AI Coding Plan, gemini for Gemini on their Google AI Pro plan, or ladder to start on a healthy free model and escalate (through Gemini and the Z.AI Coding Plan, when connected) to paid ones if it fails (an explicit model or effort wins). Report defaults to short with the full report in a file; pass full to read it inline.
 
 Several delegate calls in one message may run one after another rather than together; for real parallel work use delegate_batch, which gives each worker its own folder.
 
-Set readOnly true for research, review or planning: it runs opencode's read-only plan agent, which cannot edit files.
+Set readOnly true for research, review or planning: it runs the read-only plan agent (opencode's or Antigravity's plan mode), which cannot edit files. Gemini's 1M-token context suits reading a whole codebase. A Gemini (agy/*) worker runs with its permission prompts skipped, as headless Antigravity needs.
 
 FREE: ${free.map(m => `${m.id}${shaky(m.id)}`).join(', ') || 'none right now'}
-PAID (cheapest first, $ in/out per Mtok): ${shown || 'none right now'}${more}${plan.length > 0 ? `\nZ.AI PLAN (the user's GLM Coding Plan: no per-token cost, draws on the plan's prompt quota): ${plan.map(m => `${m.id}${shaky(m.id)}`).join(', ')}` : ''}${unreliable.length > 0 ? `\nUnreliable right now: ${unreliable.join(', ')}` : ''}
+PAID (cheapest first, $ in/out per Mtok): ${shown || 'none right now'}${more}${plan.length > 0 ? `\nZ.AI PLAN (the user's GLM Coding Plan: no per-token cost, draws on the plan's prompt quota): ${plan.map(m => `${m.id}${shaky(m.id)}`).join(', ')}` : ''}${gemini.length > 0 ? `\nGEMINI (the user's Google AI Pro plan via Antigravity: no per-token cost, draws on the plan's quota): ${gemini.map(m => `${m.id}${shaky(m.id)}`).join(', ')}` : ''}${unreliable.length > 0 ? `\nUnreliable right now: ${unreliable.join(', ')}` : ''}
 
-Do not pick a paid model other than the user's choice unless they ask. Paid models drain the user's Go allowance; Z.AI PLAN models drain the Coding Plan's quota.`
+Do not pick a paid model other than the user's choice unless they ask. Paid models drain the user's Go allowance; Z.AI PLAN models drain the Coding Plan's quota; GEMINI models the Google AI Pro plan's.`
 }
 
 async function registerTool($: EngineInterface, models: WorkerModel[]) {
@@ -89,7 +92,7 @@ async function registerTool($: EngineInterface, models: WorkerModel[]) {
       properties: {
         prompt: { type: 'string', description: 'The complete, self-contained task for the worker model.' },
         model: { type: 'string', description: 'provider/model (e.g. opencode-go/kimi-k3), or a bare id under opencode-go/. Default: the model picked in the OpenCode panel.' },
-        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder', 'plan'], description: 'Preset model and reasoning level; an explicit model or effort wins.' },
+        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder', 'plan', 'gemini'], description: 'Preset model and reasoning level; an explicit model or effort wins.' },
         effort: { type: 'string', enum: EFFORTS, description: 'Reasoning level. Default: the level picked in the OpenCode panel. Ignored by a model without that level.' },
         dir: { type: 'string', description: 'Directory the worker runs in (absolute, or relative to the session). Default: the session directory.' },
         sessionId: { type: 'string', description: 'An earlier sessionId from this tool, to continue that opencode session.' },
@@ -108,7 +111,9 @@ async function registerTool($: EngineInterface, models: WorkerModel[]) {
     name: 'delegate_batch',
     description: `Runs several opencode workers at once, each in its own git worktree (or a copy) so they never edit the same files. Tasks may depend on each other and start in dependency order. The report gives each task's status, cost, folder/branch, git diff --stat, actions and answer; review their branches and merge what is good.
 
-Use it for independent pieces of work that can run in parallel, or for a larger job split into clear parts. Workers see nothing of this conversation: put common context in shared and each task's own work in its prompt. Pass files to attach them. Give every coding task a verify command so failures are fixed by the worker, not by you. maxCost stops the batch starting more tasks once it has cost that much. Set profile (cheap, reliable, strong, plan for the Z.AI Coding Plan, or ladder: healthy free models first, then the Z.AI Coding Plan when connected, escalating to paid) for preset models and reasoning; autoMerge merges passing worktree tasks into a branch of its own, autoResolve has workers fix their own merge conflicts, and review has a free model check each task's diff so you read only flagged ones. A task with dependsOn starts from its dependencies' branches.
+Use it for independent pieces of work that can run in parallel, or for a larger job split into clear parts. Workers see nothing of this conversation: put common context in shared and each task's own work in its prompt. Pass files to attach them. Give every coding task a verify command so failures are fixed by the worker, not by you. maxCost stops the batch starting more tasks once it has cost that much. Set profile (cheap, reliable, strong, plan for the Z.AI Coding Plan, or ladder: healthy free models first, then the Z.AI Coding Plan when connected, escalating to paid) for preset models and reasoning; autoMerge merges passing worktree tasks into a branch of its own, autoResolve has workers fix their own merge conflicts, and review has a model (Gemini when connected, else a free one) check each task's diff so you read only flagged ones. A task with dependsOn starts from its dependencies' branches.
+
+Pass goal instead of tasks to hand the orchestration to Gemini (the user's Google AI Pro plan): it reads the folder and splits the goal into tasks, each task's diff is reviewed by Gemini, passing tasks are merged into oc/<batch>-merged, and Gemini checks the merged result against the goal. You read one report. review and autoMerge default to true in goal mode.
 
 Runs resume themselves after rate limits, hangs and failures, and fall back to the fallback model. The user can cancel from the OpenCode panel. Report defaults to short with the full report in a file; pass full to read it inline.
 
@@ -118,14 +123,15 @@ With background true it returns at once and the report arrives as a new message 
       type: 'object',
       properties: {
         title: { type: 'string', description: 'A short name for the batch.' },
+        goal: { type: 'string', description: 'Instead of tasks: what the batch should achieve. Gemini plans the tasks, reviews each, and checks the merged result.' },
         shared: { type: 'string', description: 'Common context prefixed to every task prompt.' },
         files: { type: 'array', items: { type: 'string' }, description: 'Files attached to every task, absolute or relative to dir.' },
         verify: { type: 'string', description: 'Default verify command for tasks without one. Strongly recommended for coding tasks.' },
         verifyRounds: { type: 'integer', minimum: 0, maximum: 5, description: 'Default verify fix-up rounds. Default 2.' },
         maxCost: { type: 'number', minimum: 0, description: 'USD; no more tasks start once the batch has cost this much.' },
-        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder', 'plan'], description: 'Default preset model and reasoning for tasks; explicit model/effort wins.' },
+        profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder', 'plan', 'gemini'], description: 'Default preset model and reasoning for tasks; explicit model/effort wins.' },
         autoResolve: { type: 'boolean', description: 'With autoMerge: a task that conflicts gets the merged branch brought into its worktree, its worker resolves the conflict, and it is merged. Default false.' },
-        review: { type: 'boolean', description: "After each task, a read-only reviewer (the reviewModel setting, free by default) checks its diff against its prompt; the report flags concerns. Default false." },
+        review: { type: 'boolean', description: "After each task, a read-only reviewer (the reviewModel setting: Gemini when connected, else a free model) checks its diff against its prompt; the report flags concerns. Default false." },
         autoMerge: { type: 'boolean', description: 'With worktree isolation, merge tasks whose verify passed (or that had none) into oc/<batch>-merged. Default false.' },
         report: { type: 'string', enum: ['short', 'full'], description: 'short (default): a compact summary with the full report in .opencode/reports. full: everything inline.' },
         tasks: {
@@ -139,7 +145,7 @@ With background true it returns at once and the report arrives as a new message 
               prompt: { type: 'string', description: 'The complete, self-contained task for this worker.' },
               title: { type: 'string', description: 'A short title for the report. Default: the id.' },
               model: { type: 'string', description: 'provider/model, or a bare id under opencode-go/. Default: the panel model.' },
-              profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder', 'plan'], description: 'Preset model and reasoning for this task; an explicit model or effort wins.' },
+              profile: { type: 'string', enum: ['cheap', 'reliable', 'strong', 'ladder', 'plan', 'gemini'], description: 'Preset model and reasoning for this task; an explicit model or effort wins.' },
               effort: { type: 'string', enum: EFFORTS, description: 'Reasoning level. Default: the panel level. Ignored by a model without that level.' },
               readOnly: { type: 'boolean', description: "Run the read-only plan agent (--agent plan) for this task." },
               dependsOn: { type: 'array', items: { type: 'string' }, description: 'Ids of tasks in this batch that must finish (done) first.' },
@@ -156,7 +162,7 @@ With background true it returns at once and the report arrives as a new message 
         autoApprove: { type: 'boolean', description: 'Pass --auto so opencode auto-approves permission prompts that are not explicitly denied. Default false.' },
         background: { type: 'boolean', description: 'Return at once and deliver the report as a new message when the batch ends. Default false.' },
       },
-      required: ['title', 'tasks'],
+      required: ['title'],
     },
   })
 }
@@ -412,6 +418,12 @@ async function addSpend($: EngineInterface, cost: number, model: string, calls?:
     await update($, planUse, u => [...prune(u, now), { at: now, calls: onPlan }])
     await $.store.set('planUse', await read($, planUse))
   }
+  const onGemini = Object.entries(calls ?? {}).reduce((n, [id, c]) => n + (isAgyId(id) ? c : 0), 0) || (calls === undefined && isAgyId(model) ? 1 : 0)
+  if (onGemini > 0) {
+    const now = Date.now()
+    await update($, geminiUse, u => [...prune(u, now), { at: now, calls: onGemini }])
+    await $.store.set('geminiUse', await read($, geminiUse))
+  }
   await update($, spend, s => ({ session: s.session + cost, runs: s.runs + 1 }))
   await update($, spendByModel, m => ({ ...m, [model]: (m[model] ?? 0) + cost }))
   await $.store.set('spendByModel', await read($, spendByModel))
@@ -598,6 +610,82 @@ async function autoMerge(
   }
 }
 
+// Goal mode: Gemini reads the folder and splits the goal into batch tasks.
+async function planGoal(
+  $: EngineInterface,
+  o: { goal: string; title: string; shared?: string; verify?: string; dir: string; models: WorkerModel[]; retries: number; stallMs: number },
+): Promise<{ plan: Plan; model: string } | string> {
+  const checker = geminiChecker(o.models)
+  if (checker === undefined) return NO_GEMINI
+  $.ui.status(`Gemini is planning ${o.title}…`)
+  try {
+    const outcome = await runResilient(
+      $,
+      {
+        bin: '',
+        model: checker.model,
+        level: checker.effort,
+        prompt: planPrompt(o.goal, { shared: o.shared, verify: o.verify, maxTasks: MAX_PLANNED }),
+        cwd: o.dir,
+        readOnly: true,
+        retries: o.retries,
+        stallMs: o.stallMs,
+        verifyRounds: 0,
+      },
+      () => undefined,
+    )
+    await addSpend($, outcome.run.cost, outcome.model, outcome.run.calls)
+    if (outcome.reason !== 'ok') {
+      const why = (outcome.run.errors.join('\n') || outcome.stderr || outcome.run.text).trim().slice(0, 500)
+      return `Gemini could not plan the goal (${outcome.reason})${why ? `: ${why}` : '.'}`
+    }
+    const plan = parsePlan(outcome.run.text)
+    return typeof plan === 'string' ? `${plan} Its answer began: ${outcome.run.text.slice(0, 300)}` : { plan, model: outcome.model }
+  } finally {
+    await showStatus($)
+  }
+}
+
+// Goal mode's last step: Gemini checks the merged branch as a whole against the goal.
+async function checkMerged(
+  $: EngineInterface,
+  o: { goal: string; top: string; base: string; integration: string; models: WorkerModel[]; retries: number; stallMs: number; signal?: AbortSignal },
+) {
+  const checker = geminiChecker(o.models)
+  if (checker === undefined) return undefined
+  $.ui.status('Gemini is checking the merged result…')
+  try {
+    const review = await reviewTask($, {
+      bin: '',
+      dir: o.top,
+      base: o.base,
+      rev: `${o.base}...${o.integration}`,
+      prompt: o.goal,
+      ask: diff => checkPrompt(o.goal, diff),
+      model: checker.model,
+      level: checker.effort,
+      retries: o.retries,
+      stallMs: o.stallMs,
+      signal: o.signal,
+    })
+    await addSpend($, review.cost, review.model)
+    return review
+  } finally {
+    await showStatus($)
+  }
+}
+
+function planText(plan: Plan, model: string, goal: string) {
+  const tasks = plan.tasks.map(t => `- ${t.id}: ${t.title}${t.dependsOn.length > 0 ? ` (after ${t.dependsOn.join(', ')})` : ''}`).join('\n')
+  return `## Plan (${model})\nGoal: ${goal.length > 300 ? `${goal.slice(0, 300)}…` : goal}\n${plan.summary ? `${plan.summary}\n` : ''}${tasks}`
+}
+
+function checkText(check: { verdict: string; notes: string; model: string } | undefined, why?: string) {
+  if (check === undefined) return why === undefined ? '' : `## Final check\n${why}`
+  const head = check.verdict === 'ok' ? 'OK' : check.verdict === 'concerns' ? 'CONCERNS' : 'could not run'
+  return `## Final check (${check.model}): ${head}${check.notes ? `\n${check.notes}` : ''}`
+}
+
 export const register: Register = (on, options) => {
   const defaultModel = fullId(String(options.defaultModel ?? 'opencode-go/kimi-k3'))
   const localDir = { dir: String(options.localModelsDir ?? '').trim() }
@@ -621,6 +709,11 @@ export const register: Register = (on, options) => {
     if (Array.isArray(storedPlanUse) && (await read($, planUse)).length === 0) {
       const uses = storedPlanUse.filter((u): u is PlanUse => typeof u?.at === 'number' && typeof u?.calls === 'number')
       await update($, planUse, () => prune(uses, Date.now()))
+    }
+    const storedGeminiUse = await $.store.get('geminiUse')
+    if (Array.isArray(storedGeminiUse) && (await read($, geminiUse)).length === 0) {
+      const uses = storedGeminiUse.filter((u): u is PlanUse => typeof u?.at === 'number' && typeof u?.calls === 'number')
+      await update($, geminiUse, () => prune(uses, Date.now()))
     }
     const storedSpendByModel = await $.store.get('spendByModel')
     if (isNumberMap(storedSpendByModel) && Object.keys(await read($, spendByModel)).length === 0) {
@@ -687,8 +780,8 @@ export const register: Register = (on, options) => {
     }
 
     if (sub === 'models') {
-      const { free, paid, plan } = worker(await models())
-      return { text: modelsText(free, paid, plan, rest) }
+      const { free, paid, plan, gemini } = worker(await models())
+      return { text: modelsText(free, paid, plan, rest, gemini) }
     }
 
     if (sub === 'local') {
@@ -886,6 +979,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
 
     const allModels = (await read($, catalog)).models
     if (input.profile === 'plan' && !input.model && planPreset(allModels) === undefined) return { deny: NO_PLAN }
+    if (input.profile === 'gemini' && !input.model && geminiPreset(allModels) === undefined) return { deny: NO_GEMINI }
     const planOk = await planRoom($, Number(options.zaiQuota ?? 0) || 0)
     const rungs = input.profile === 'ladder' && !input.model ? ladder(allModels, await read($, health), planOk) : []
     const profile = typeof input.profile === 'string' ? presetIn(allModels, input.profile) ?? (input.profile === 'ladder' ? presetNamed('reliable') : undefined) : undefined
@@ -1029,7 +1123,28 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     type TaskSpec = BatchTaskSpec & { profile?: string }
     const input: DelegateBatchInput = e
     if (typeof input.title !== 'string' || input.title.trim() === '') return { deny: 'delegate_batch needs a title.' }
-    const specs: TaskSpec[] = Array.isArray(input.tasks) ? input.tasks : []
+    let specs: TaskSpec[] = Array.isArray(input.tasks) ? input.tasks : []
+    const goal = typeof input.goal === 'string' && input.goal.trim() !== '' ? input.goal.trim() : undefined
+    if (goal === undefined && specs.length === 0) return { deny: 'delegate_batch needs tasks, or a goal for Gemini to plan.' }
+    let planned: { plan: Plan; model: string } | undefined
+    if (goal !== undefined && specs.length === 0) {
+      const got = await planGoal($, {
+        goal,
+        title: input.title,
+        shared: typeof input.shared === 'string' ? input.shared : undefined,
+        verify: typeof input.verify === 'string' && input.verify.trim() !== '' ? input.verify : undefined,
+        dir: resolveDir(sessionCwd, input.dir) ?? sessionCwd,
+        models: (await read($, catalog)).models,
+        retries: Math.max(0, Math.round(Number(options.autoRetries ?? 3) || 0)),
+        stallMs: Math.max(1, (Number(options.stallMinutes ?? 10) || 10) * 60_000),
+      })
+      if (typeof got === 'string') return { deny: got }
+      planned = got
+      specs = got.plan.tasks.map(t => ({ ...t }))
+    }
+    // Goal mode hands the checking to Gemini too, unless the call says otherwise.
+    const wantReview = input.review ?? planned !== undefined
+    const wantMerge = input.autoMerge ?? planned !== undefined
     if (specs.some(t => t === null || typeof t !== 'object')) return { deny: 'Every task needs an id.' }
     const problem = checkTasks(specs)
     if (problem !== undefined) return { deny: problem }
@@ -1052,6 +1167,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const panelEffort = await read($, effort)
     const models = (await read($, catalog)).models
     if ((input.profile === 'plan' || specs.some(t => t.profile === 'plan' && !t.model)) && planPreset(models) === undefined) return { deny: NO_PLAN }
+    if ((input.profile === 'gemini' || specs.some(t => t.profile === 'gemini' && !t.model)) && geminiPreset(models) === undefined) return { deny: NO_GEMINI }
     const healthNow = await read($, health)
     const planOk = await planRoom($, Number(options.zaiQuota ?? 0) || 0)
     const ladders = new Map<string, Rung[]>()
@@ -1083,7 +1199,12 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const dailyBudget = Number(options.dailyBudget ?? 0) || 0
     const fallbackSetting = String(options.fallbackModel ?? '')
     const fallback = fallbackSetting === '' ? undefined : fullId(fallbackSetting)
-    const reviewModel = fullId(String(options.reviewModel ?? 'opencode/deepseek-v4.1-flash-free'))
+    // auto: Gemini when the Google AI Pro plan is connected, else a free model.
+    const reviewSetting = String(options.reviewModel ?? 'auto').trim()
+    const checker = geminiChecker(models)
+    const reviewModel =
+      reviewSetting === '' || reviewSetting === 'auto' ? checker?.model ?? 'opencode/deepseek-v4.1-flash-free' : fullId(reviewSetting)
+    const reviewLevel = reviewModel === checker?.model ? checker.effort : undefined
 
     const id = batchId()
     const batch: Batch = {
@@ -1237,10 +1358,10 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
           if (stat !== undefined && stat !== '') extras.diffs![task.id] = stat
         }
         let reviewCost = 0
-        if (input.review === true && !failed && prepared.branch !== undefined && batch.base !== undefined) {
+        if (wantReview && !failed && prepared.branch !== undefined && batch.base !== undefined) {
           task.stage = 'reviewing'
           await sync()
-          const review = await reviewTask($, { bin, dir: prepared.dir, base: batch.base, prompt: spec.prompt, model: reviewModel, retries, stallMs, fallback, signal })
+          const review = await reviewTask($, { bin, dir: prepared.dir, base: batch.base, prompt: spec.prompt, model: reviewModel, level: reviewLevel, retries, stallMs, fallback, signal })
           task.stage = undefined
           extras.reviews ??= {}
           extras.reviews[task.id] = { verdict: review.verdict, notes: review.notes }
@@ -1307,13 +1428,22 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       batch.endedAt = Date.now()
       await sync()
       await showStatus($)
-      if (input.autoMerge === true && isolation === 'worktree') await autoMerge($, batch, extras, input.autoResolve === true ? resolver : undefined)
-      const full = batchReport(batch, extras)
+      if (wantMerge && isolation === 'worktree') await autoMerge($, batch, extras, input.autoResolve === true ? resolver : undefined)
+      let check = ''
+      if (goal !== undefined && planned !== undefined) {
+        if (batch.integration !== undefined && batch.top !== undefined && (extras.merged ?? []).length > 0) {
+          const review = await checkMerged($, { goal, top: batch.top, base: batch.base ?? 'HEAD', integration: batch.integration, models, retries, stallMs, signal: batchSignal })
+          check = checkText(review, 'Gemini is not connected, so the merged result was not checked.')
+        } else check = checkText(undefined, 'Nothing was merged, so there was no merged result to check.')
+      }
+      const head = planned === undefined ? '' : `${planText(planned.plan, planned.model, goal ?? '')}\n\n`
+      const tail = check === '' ? '' : `\n\n${check}`
+      const full = `${head}${batchReport(batch, extras)}${tail}`
       const path = await writeReport($, base, id, full)
       batch.reportPath = path
       await sync()
       await addHistory($, batch)
-      return input.report === 'full' ? full : batchShortReport({ batch, extras, path })
+      return input.report === 'full' ? full : `${head}${batchShortReport({ batch, extras, path })}${tail}`
     }
 
     if (batch.background) {
@@ -1392,6 +1522,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       localNow: await read($, local),
       planUses: await read($, planUse),
       planQuota: Number(options.zaiQuota ?? 0) || 0,
+      geminiUses: await read($, geminiUse),
     }
     return panel($.ui.resolve(e), e.surface, view, {
       pick: id => void pick($, id),

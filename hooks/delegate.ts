@@ -1,6 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { Phase, WorkerModel } from '../types'
+import { AGY_STALL_MS, agyArgv, conversationIn, findAgy, isAgyId } from './gemini'
 
 export type Run = {
   text: string
@@ -62,7 +63,7 @@ export type ResilientResult = {
 // How long a resume waits before it starts, times the retry number. Abortable through the run's signal.
 export const RETRY_WAIT_MS = 15_000
 
-const RATE_LIMIT = [/429/, /rate limit/i, /endpoint is unavailable/i, /overloaded/i]
+const RATE_LIMIT = [/429/, /rate limit/i, /endpoint is unavailable/i, /overloaded/i, /RESOURCE_EXHAUSTED/, /quota (exceeded|exhausted)/i]
 
 // `--` stops a prompt that starts with `-` being read as a flag. The working folder is the
 // spawn's cwd alone: passing --dir as well resolved a relative dir twice.
@@ -151,9 +152,11 @@ export async function runOpencode(
   argv: readonly string[],
   cwd: string | undefined,
   onProgress: (run: Run) => void | Promise<void>,
-  o: { stallMs?: number; signal?: AbortSignal } = {},
+  // text: the whole of stdout is the answer (agy), not `opencode run --format json` events.
+  o: { stallMs?: number; signal?: AbortSignal; format?: 'json' | 'text' } = {},
 ): Promise<{ run: Run; end: RunEnd; stderr: string; reason: EndReason }> {
   const run: Run = { text: '', tools: [], errors: [], cost: 0 }
+  const asText = o.format === 'text'
   let pending = ''
   let stderr = ''
   let end: RunEnd = { code: null, signal: null }
@@ -232,18 +235,27 @@ export async function runOpencode(
       stderr = (stderr + text).slice(-4000)
       continue
     }
+    if (asText) {
+      pending += text
+      continue
+    }
     const lines = (pending + text).split('\n')
     pending = lines.pop() ?? ''
     const before = run.tools.length
     for (const line of lines) readEvent(run, line)
     if (run.tools.length !== before) await onProgress(run)
   }
-  if (pending !== '') readEvent(run, pending)
+  if (asText) {
+    const answer = pending.trim()
+    // agy's own failures arrive on stdout as `jetski: …`.
+    if (/^jetski:/.test(answer)) run.errors.push(answer)
+    else run.text = answer
+  } else if (pending !== '') readEvent(run, pending)
   if (hung) end = { code: null, signal: 'hung' }
   if (cancelled) end = { code: null, signal: 'cancelled' }
 
   // A finished run that merely mentions a rate limit along the way is still ok.
-  const failed = end.code !== 0 || (run.text === '' && run.errors.length > 0)
+  const failed = end.code !== 0 || (run.text === '' && (asText || run.errors.length > 0))
   const reason: EndReason = cancelled
     ? 'cancelled'
     : hung
@@ -254,6 +266,34 @@ export async function runOpencode(
           ? 'rate-limited'
           : 'failed'
   return { run, end, stderr, reason }
+}
+
+// One agy attempt: its log names the conversation a resume continues, and is removed after.
+async function runAgy(
+  $: EngineInterface,
+  o: Pick<ResilientOptions, 'model' | 'level' | 'sessionId' | 'readOnly' | 'files' | 'prompt' | 'cwd' | 'stallMs' | 'signal'>,
+  onProgress: (run: Run) => void | Promise<void>,
+): Promise<{ run: Run; end: RunEnd; stderr: string; reason: EndReason }> {
+  const bin = await findAgy($)
+  if (bin === undefined) {
+    const run: Run = { text: '', tools: [], errors: ['The Antigravity CLI (agy) is not installed or not on PATH.'], cost: 0 }
+    return { run, end: { code: 127, signal: null }, stderr: '', reason: 'failed' }
+  }
+  const home = (await $.env.get('HOME')) ?? '/tmp'
+  const folder = `${home}/.cache/opencode-go`
+  const logFile = `${folder}/agy-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.log`
+  await $.process.run(['mkdir', '-p', folder]).catch(() => undefined)
+  const argv = agyArgv(bin, { model: o.model, level: o.level, sessionId: o.sessionId, readOnly: o.readOnly, files: o.files, prompt: o.prompt, logFile })
+  try {
+    const result = await runOpencode($, argv, o.cwd, onProgress, { stallMs: Math.max(o.stallMs, AGY_STALL_MS), signal: o.signal, format: 'text' })
+    const log = await $.fs.read(logFile).catch(() => '')
+    result.run.sessionId = conversationIn(typeof log === 'string' ? log : '') ?? o.sessionId
+    // agy reports no steps: each run counts as one call on the plan.
+    result.run.steps = 1
+    return result
+  } finally {
+    await $.process.run(['rm', '-f', logFile]).catch(() => undefined)
+  }
 }
 
 function merge(into: Run, from: Run) {
@@ -294,6 +334,7 @@ export async function runResilient(
   const started = Date.now()
   const merged: Run = { text: '', tools: [], errors: [], cost: 0 }
   let sessionId = o.sessionId
+  let sessionOnAgy = isAgyId(o.model)
   let model = o.model
   let level = o.level
   let attempts = 0
@@ -310,16 +351,31 @@ export async function runResilient(
     }
     if (attempts > 0 && o.onAttempt !== undefined) await o.onAttempt({ attempt: attempts + 1, model: nextModel, reason: why, previous: reason })
     attempts++
-    const argv = buildArgv(o.bin, {
-      model: nextModel,
-      level: nextLevel,
-      sessionId: nextSession,
-      autoApprove: o.autoApprove,
-      readOnly: o.readOnly,
-      files: o.files,
-      prompt,
-    })
-    const result = await runOpencode($, argv, o.cwd, onProgress, { stallMs: o.stallMs, signal: o.signal })
+    // A session belongs to one CLI: moving between opencode and agy starts the task afresh.
+    const viaAgy = isAgyId(nextModel)
+    if (viaAgy !== sessionOnAgy) {
+      if (nextSession !== undefined) prompt = o.prompt
+      nextSession = undefined
+      sessionId = undefined
+    }
+    const result = viaAgy
+      ? await runAgy($, { ...o, model: nextModel, level: nextLevel, sessionId: nextSession, prompt }, onProgress)
+      : await runOpencode(
+          $,
+          buildArgv(o.bin, {
+            model: nextModel,
+            level: nextLevel,
+            sessionId: nextSession,
+            autoApprove: o.autoApprove,
+            readOnly: o.readOnly,
+            files: o.files,
+            prompt,
+          }),
+          o.cwd,
+          onProgress,
+          { stallMs: o.stallMs, signal: o.signal },
+        )
+    sessionOnAgy = viaAgy
     merge(merged, result.run)
     merged.calls = { ...merged.calls, [nextModel]: (merged.calls?.[nextModel] ?? 0) + (result.run.steps ?? 0) }
     end = result.end

@@ -1,12 +1,15 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { Catalog, WorkerModel } from '../types'
+import { loadAgyModels } from './gemini'
 
 // A Z.AI Coding Plan model lists $0 but draws on the plan's prompt quota, so it is neither free nor paid.
 export const isPlan = (m: WorkerModel) => m.source === 'zai'
-export const isFree = (m: WorkerModel) => !isPlan(m) && m.input === 0 && m.output === 0
+// A Google AI Pro model, run through Antigravity: no per-token cost, drawn from that plan's quota.
+export const isGemini = (m: WorkerModel) => m.source === 'gemini'
+export const isFree = (m: WorkerModel) => !isPlan(m) && !isGemini(m) && m.input === 0 && m.output === 0
 /** Whether a run on the model spends dollars, and so counts against the daily budget. */
-export const costsMoney = (m: WorkerModel) => !isFree(m) && !isPlan(m)
+export const costsMoney = (m: WorkerModel) => !isFree(m) && !isPlan(m) && !isGemini(m)
 export const price = (n: number) => `$${n < 1 ? n.toFixed(2).replace(/0$/, '') : n}`
 export const fullId = (id: string) => (id.includes('/') ? id : `opencode-go/${id}`)
 
@@ -101,8 +104,8 @@ export function parseModels(out: string): WorkerModel[] {
   return models
 }
 
-// What the panel lists: every free model (Go's copy first), Go's paid ones, and the Z.AI Coding
-// Plan's. Zen's paid models bill pay-as-you-go credit, not the Go plan, so they are left out.
+// What the panel lists: every free model (Go's copy first), Go's paid ones, the Z.AI Coding
+// Plan's, and the Google AI Pro plan's through Antigravity. Zen's paid models bill pay-as-you-go credit, not the Go plan, so they are left out.
 export function worker(models: WorkerModel[]) {
   const goFree = new Set(models.filter(m => m.source === 'go' && isFree(m)).map(m => m.id.split('/')[1]))
   const free = models
@@ -112,7 +115,8 @@ export function worker(models: WorkerModel[]) {
     .filter(m => m.source === 'go' && !isFree(m))
     .sort((a, b) => a.input + a.output - (b.input + b.output))
   const plan = models.filter(isPlan).sort((a, b) => a.name.localeCompare(b.name))
-  return { free, paid, plan }
+  const gemini = models.filter(isGemini)
+  return { free, paid, plan, gemini }
 }
 
 const CACHE = 'catalog'
@@ -123,7 +127,7 @@ const isModel = (m: unknown): m is WorkerModel => {
   return (
     typeof x.id === 'string' &&
     typeof x.name === 'string' &&
-    (x.source === 'go' || x.source === 'zen' || x.source === 'zai') &&
+    (x.source === 'go' || x.source === 'zen' || x.source === 'zai' || x.source === 'gemini') &&
     typeof x.maker === 'string' &&
     typeof x.input === 'number' &&
     typeof x.output === 'number' &&
@@ -147,13 +151,17 @@ export async function writeCache($: EngineInterface, models: WorkerModel[]) {
 }
 
 export async function loadCatalog($: EngineInterface): Promise<Catalog> {
+  const [opencode, gemini] = await Promise.all([loadOpencodeModels($), loadAgyModels($).catch(() => [])])
+  if (opencode.models.length === 0 && gemini.length === 0) return { status: 'error', models: [], error: opencode.error ?? 'no models listed' }
+  return { status: 'ready', models: [...opencode.models, ...gemini] }
+}
+
+async function loadOpencodeModels($: EngineInterface): Promise<{ models: WorkerModel[]; error?: string }> {
   const bin = await findOpencode($)
-  if (bin === undefined) return { status: 'error', models: [], error: 'opencode CLI not found' }
+  if (bin === undefined) return { models: [], error: 'opencode CLI not found' }
   const out = await $.process
     .run([bin, 'models', '--verbose'], { timeoutMs: 60_000 })
     .catch(err => ({ exitCode: 1, stdout: '', stderr: String(err) }))
   const models = parseModels(out.stdout.replace(/\x1b\[[0-9;]*m/g, ''))
-  return models.length > 0
-    ? { status: 'ready', models }
-    : { status: 'error', models: [], error: out.stderr.trim().split('\n').at(-1) || 'no models listed' }
+  return models.length > 0 ? { models } : { models: [], error: out.stderr.trim().split('\n').at(-1) || 'no models listed' }
 }

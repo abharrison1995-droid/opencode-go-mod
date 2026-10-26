@@ -42,7 +42,7 @@ export function sourcesCheck(models: WorkerModel[]): Check {
   const go = count('go')
   const zen = count('zen')
   if (go + zen === 0) return { name: 'model sources', ok: false, detail: 'opencode lists no Go or Zen models: run opencode auth login' }
-  return { name: 'model sources', ok: true, detail: `Go ${go} · Zen ${zen} · Z.AI ${count('zai')}` }
+  return { name: 'model sources', ok: true, detail: `Go ${go} · Zen ${zen} · Z.AI ${count('zai')} · Gemini ${count('gemini')}` }
 }
 
 export function zaiCheck(models: WorkerModel[]): Check {
@@ -50,6 +50,14 @@ export function zaiCheck(models: WorkerModel[]): Check {
   return plan > 0
     ? { name: 'Z.AI Coding Plan', ok: true, detail: `${plan} models` }
     : { name: 'Z.AI Coding Plan', ok: true, skipped: true, detail: 'not connected: run opencode auth login and pick Z.AI Coding Plan' }
+}
+
+// agy lists models only while signed in, so a listed Gemini model shows the sign-in works.
+export function geminiCheck(models: WorkerModel[]): Check {
+  const gemini = models.filter(m => m.source === 'gemini')
+  return gemini.length > 0
+    ? { name: 'Google AI Pro (Antigravity)', ok: true, detail: `${gemini.length} models: ${gemini.map(m => m.id.slice(4)).join(', ')}` }
+    : { name: 'Google AI Pro (Antigravity)', ok: true, skipped: true, detail: 'not connected: install the Antigravity CLI (agy), run agy once to sign in, then refresh models' }
 }
 
 async function localCheck($: EngineInterface, spec: LocalSpec, opts: LocalOptions): Promise<Check> {
@@ -127,7 +135,7 @@ export async function selfTest($: EngineInterface, o: { bin?: string; dir: strin
     }),
   )
 
-  if (o.models !== undefined) checks.push(sourcesCheck(o.models), zaiCheck(o.models))
+  if (o.models !== undefined) checks.push(sourcesCheck(o.models), zaiCheck(o.models), geminiCheck(o.models))
   if (o.local !== undefined) {
     const local = o.local
     for (const spec of LOCAL) checks.push(await guard(spec.label, () => localCheck($, spec, local)))

@@ -1,8 +1,8 @@
 {
   "name": "opencode-go",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "license": "MIT",
-  "description": "Lets Claude delegate tasks to OpenCode Go, Zen and Z.AI Coding Plan models, picked in an OpenCode panel with FREE, PAID and Z.AI PLAN sections and a reasoning level, and ask local decision models (Kev, Laya) quick questions.",
+  "description": "Lets Claude delegate tasks to OpenCode Go, Zen, Z.AI Coding Plan and Gemini (Google AI Pro, through Antigravity) models, picked in an OpenCode panel, have Gemini plan and check whole goals, and ask local decision models (Kev, Laya) quick questions.",
   "author": {
     "name": "abharrison1995-droid",
     "url": "https://github.com/abharrison1995-droid"
@@ -47,8 +47,8 @@
     "reviewModel": {
       "type": "string",
       "title": "Review model",
-      "description": "Model that reviews batch tasks when delegate_batch is called with review: true. A free model is enough.",
-      "default": "opencode/deepseek-v4.1-flash-free"
+      "description": "Model that reviews batch tasks (delegate_batch with review: true, or goal mode). auto: Gemini when the Google AI Pro plan is connected through Antigravity, else a free model.",
+      "default": "auto"
     },
     "zaiQuota": {
       "type": "number",
