@@ -76,6 +76,8 @@ const STAGES: Record<CardStage, { icon: string; word: string; color: string }> =
   retrying: { icon: '↻', word: 'retrying', color: 'warning' },
   verifying: { icon: '◆', word: 'verifying', color: 'permission' },
   reviewing: { icon: '◇', word: 'reviewing', color: 'permission' },
+  planning: { icon: '◈', word: 'planning', color: 'suggestion' },
+  checking: { icon: '◆', word: 'checking', color: 'permission' },
 }
 
 function stageOf(a: Pick<Agent, 'steps' | 'attempt' | 'stage'>): CardStage {

@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.11.2]
+
+### Added
+
+- The checker's work shows in the panel's AGENTS beside the workers: a card each for goal mode's planning, every task review, and the final check, with its model, a planning, reviewing or checking stage, and a Cancel button.
+
 ## [0.11.1]
 
 ### Added

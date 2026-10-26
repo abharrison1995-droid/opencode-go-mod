@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Batch, BatchSummary, PlanUse, BatchTask, Catalog, DecideInput, DelegateBatchInput, DelegateInput, Effort, Job, LocalName, LocalServer, ModelHealth, Preset, Preview, Spend, WorkerModel } from '../types'
+import type { Batch, BatchSummary, PlanUse, BatchTask, Phase, Catalog, DecideInput, DelegateBatchInput, DelegateInput, Effort, Job, LocalName, LocalServer, ModelHealth, Preset, Preview, Spend, WorkerModel } from '../types'
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
 import { costsMoney, findOpencode, fullId, isFree, isPlan, loadCatalog, price, readCache, worker, writeCache } from './catalog'
@@ -612,6 +612,33 @@ async function autoMerge(
   }
 }
 
+// Aborts when either signal does.
+function either(a: AbortSignal | undefined, b: AbortSignal): AbortSignal {
+  if (a === undefined) return b
+  const both = new AbortController()
+  const stop = () => both.abort()
+  if (a.aborted || b.aborted) stop()
+  a.addEventListener('abort', stop)
+  b.addEventListener('abort', stop)
+  return both.signal
+}
+
+// The checker's work (planning, a review, the final check) as a card in the panel's AGENTS,
+// cancellable like a delegate job. fn gets the card's abort signal.
+async function asJob<T>($: EngineInterface, o: { model: string; effort?: string; stage: Phase; last: string }, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
+  const job: Job = { id: taskId(), model: o.model, effort: o.effort, steps: 0, stage: o.stage, last: o.last }
+  await update($, jobs, list => [...list, job])
+  await showStatus($)
+  const signal = track(job.id)
+  try {
+    return await fn(signal)
+  } finally {
+    untrack(job.id)
+    await update($, jobs, list => list.filter(j => j.id !== job.id))
+    await showStatus($)
+  }
+}
+
 // Goal mode: Gemini reads the folder and splits the goal into batch tasks.
 async function planGoal(
   $: EngineInterface,
@@ -619,8 +646,7 @@ async function planGoal(
 ): Promise<{ plan: Plan; model: string } | string> {
   const checker = o.checker
   if (checker === undefined) return NO_GEMINI
-  $.ui.status(`Gemini is planning ${o.title}…`)
-  try {
+  return asJob($, { model: checker.model, effort: checker.effort, stage: 'planning', last: `planning ${o.title}` }, async signal => {
     const outcome = await runResilient(
       $,
       {
@@ -632,20 +658,20 @@ async function planGoal(
         readOnly: true,
         retries: o.retries,
         stallMs: o.stallMs,
+        signal,
         verifyRounds: 0,
       },
       () => undefined,
     )
     await addSpend($, outcome.run.cost, outcome.model, outcome.run.calls)
+    if (outcome.reason === 'cancelled') return 'Planning was cancelled.'
     if (outcome.reason !== 'ok') {
       const why = (outcome.run.errors.join('\n') || outcome.stderr || outcome.run.text).trim().slice(0, 500)
       return `Gemini could not plan the goal (${outcome.reason})${why ? `: ${why}` : '.'}`
     }
     const plan = parsePlan(outcome.run.text)
     return typeof plan === 'string' ? `${plan} Its answer began: ${outcome.run.text.slice(0, 300)}` : { plan, model: outcome.model }
-  } finally {
-    await showStatus($)
-  }
+  })
 }
 
 // Goal mode's last step: Gemini checks the merged branch as a whole against the goal.
@@ -655,8 +681,7 @@ async function checkMerged(
 ) {
   const checker = o.checker
   if (checker === undefined) return undefined
-  $.ui.status('Gemini is checking the merged result…')
-  try {
+  return asJob($, { model: checker.model, effort: checker.effort, stage: 'checking', last: 'checking the merged result' }, async signal => {
     const review = await reviewTask($, {
       bin: '',
       dir: o.top,
@@ -668,13 +693,11 @@ async function checkMerged(
       level: checker.effort,
       retries: o.retries,
       stallMs: o.stallMs,
-      signal: o.signal,
+      signal: either(o.signal, signal),
     })
     await addSpend($, review.cost, review.model)
     return review
-  } finally {
-    await showStatus($)
-  }
+  })
 }
 
 function planText(plan: Plan, model: string, goal: string) {
@@ -1364,7 +1387,10 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
         if (wantReview && !failed && prepared.branch !== undefined && batch.base !== undefined) {
           task.stage = 'reviewing'
           await sync()
-          const review = await reviewTask($, { bin, dir: prepared.dir, base: batch.base, prompt: spec.prompt, model: reviewModel, level: reviewLevel, retries, stallMs, fallback, signal })
+          const reviewBase = batch.base
+          const review = await asJob($, { model: reviewModel, effort: reviewLevel, stage: 'reviewing', last: `reviewing ${task.id}` }, cardSignal =>
+            reviewTask($, { bin, dir: prepared.dir, base: reviewBase, prompt: spec.prompt, model: reviewModel, level: reviewLevel, retries, stallMs, fallback, signal: either(signal, cardSignal) }),
+          )
           task.stage = undefined
           extras.reviews ??= {}
           extras.reviews[task.id] = { verdict: review.verdict, notes: review.notes }
