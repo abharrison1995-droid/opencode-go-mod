@@ -167,6 +167,9 @@ export type DelegateBatchInput = {
   tasks?: DelegateBatchTask[]
   /** What the batch should achieve: Gemini splits it into tasks, reviews each and checks the merged result. */
   goal?: string
+  /** Model that plans, reviews and checks (default Gemini 4 Argon); a bare id is agy's. */
+  checker?: string
+  checkerEffort?: Effort
   shared?: string
   files?: string[]
   verify?: string

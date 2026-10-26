@@ -5,7 +5,7 @@ import type { Batch, BatchSummary, PlanUse, BatchTask, Catalog, DecideInput, Del
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
 import { costsMoney, findOpencode, fullId, isFree, isPlan, loadCatalog, price, readCache, worker, writeCache } from './catalog'
-import { checkPrompt, geminiChecker, isAgyId, MAX_PLANNED, NO_GEMINI, parsePlan, planPrompt } from './gemini'
+import { checkPrompt, isAgyId, MAX_PLANNED, NO_GEMINI, parsePlan, pickChecker, planPrompt } from './gemini'
 import type { Plan } from './gemini'
 import { batchesText, diffText, effortText, HELP, historyText, localText, setupText, matchJob, matchModel, modelsText, parseArgs, presetsText, statusText } from './commands'
 import { chatTools, explainError, readKey, requestBody, sendWithRetry, toMessages } from './chat'
@@ -20,7 +20,7 @@ import type { LocalOptions, LocalSpec } from './local'
 import type { Rung } from './ladder'
 import { panel } from './panel'
 import type { PanelView } from './panel'
-import { EFFORTS, geminiPreset, NO_PLAN, planPreset, presetIn, presetNamed, presetsFor, rate } from './presets'
+import { EFFORTS, geminiPreset, isEffort, NO_PLAN, planPreset, presetIn, presetNamed, presetsFor, rate } from './presets'
 import { batchReport, batchShortReport, changedFiles, delegateShort, writeReport } from './report'
 import type { ReportExtras } from './report'
 import { resolveConflict } from './resolve'
@@ -124,6 +124,8 @@ With background true it returns at once and the report arrives as a new message 
       properties: {
         title: { type: 'string', description: 'A short name for the batch.' },
         goal: { type: 'string', description: 'Instead of tasks: what the batch should achieve. Gemini plans the tasks, reviews each, and checks the merged result.' },
+        checker: { type: 'string', description: 'Model that plans (goal mode), reviews and checks, e.g. agy/gemini-3.8-flash. Default: Gemini 4 Argon when connected.' },
+        checkerEffort: { type: 'string', enum: EFFORTS, description: "The checker's reasoning level. Default: high." },
         shared: { type: 'string', description: 'Common context prefixed to every task prompt.' },
         files: { type: 'array', items: { type: 'string' }, description: 'Files attached to every task, absolute or relative to dir.' },
         verify: { type: 'string', description: 'Default verify command for tasks without one. Strongly recommended for coding tasks.' },
@@ -613,9 +615,9 @@ async function autoMerge(
 // Goal mode: Gemini reads the folder and splits the goal into batch tasks.
 async function planGoal(
   $: EngineInterface,
-  o: { goal: string; title: string; shared?: string; verify?: string; dir: string; models: WorkerModel[]; retries: number; stallMs: number },
+  o: { goal: string; title: string; shared?: string; verify?: string; dir: string; checker?: { model: string; effort: Effort }; retries: number; stallMs: number },
 ): Promise<{ plan: Plan; model: string } | string> {
-  const checker = geminiChecker(o.models)
+  const checker = o.checker
   if (checker === undefined) return NO_GEMINI
   $.ui.status(`Gemini is planning ${o.title}…`)
   try {
@@ -649,9 +651,9 @@ async function planGoal(
 // Goal mode's last step: Gemini checks the merged branch as a whole against the goal.
 async function checkMerged(
   $: EngineInterface,
-  o: { goal: string; top: string; base: string; integration: string; models: WorkerModel[]; retries: number; stallMs: number; signal?: AbortSignal },
+  o: { goal: string; top: string; base: string; integration: string; checker?: { model: string; effort: Effort }; retries: number; stallMs: number; signal?: AbortSignal },
 ) {
-  const checker = geminiChecker(o.models)
+  const checker = o.checker
   if (checker === undefined) return undefined
   $.ui.status('Gemini is checking the merged result…')
   try {
@@ -1127,6 +1129,8 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const goal = typeof input.goal === 'string' && input.goal.trim() !== '' ? input.goal.trim() : undefined
     if (goal === undefined && specs.length === 0) return { deny: 'delegate_batch needs tasks, or a goal for Gemini to plan.' }
     let planned: { plan: Plan; model: string } | undefined
+    const checkerEffort = isEffort(input.checkerEffort) ? input.checkerEffort : undefined
+    const checker = pickChecker((await read($, catalog)).models, input.checker, checkerEffort)
     if (goal !== undefined && specs.length === 0) {
       const got = await planGoal($, {
         goal,
@@ -1134,7 +1138,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
         shared: typeof input.shared === 'string' ? input.shared : undefined,
         verify: typeof input.verify === 'string' && input.verify.trim() !== '' ? input.verify : undefined,
         dir: resolveDir(sessionCwd, input.dir) ?? sessionCwd,
-        models: (await read($, catalog)).models,
+        checker,
         retries: Math.max(0, Math.round(Number(options.autoRetries ?? 3) || 0)),
         stallMs: Math.max(1, (Number(options.stallMinutes ?? 10) || 10) * 60_000),
       })
@@ -1199,9 +1203,8 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     const dailyBudget = Number(options.dailyBudget ?? 0) || 0
     const fallbackSetting = String(options.fallbackModel ?? '')
     const fallback = fallbackSetting === '' ? undefined : fullId(fallbackSetting)
-    // auto: Gemini when the Google AI Pro plan is connected, else a free model.
-    const reviewSetting = String(options.reviewModel ?? 'auto').trim()
-    const checker = geminiChecker(models)
+    // A checker named in the call reviews too; auto: Gemini when the Google AI Pro plan is connected, else a free model.
+    const reviewSetting = typeof input.checker === 'string' && input.checker.trim() !== '' ? 'auto' : String(options.reviewModel ?? 'auto').trim()
     const reviewModel =
       reviewSetting === '' || reviewSetting === 'auto' ? checker?.model ?? 'opencode/deepseek-v4.1-flash-free' : fullId(reviewSetting)
     const reviewLevel = reviewModel === checker?.model ? checker.effort : undefined
@@ -1432,7 +1435,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       let check = ''
       if (goal !== undefined && planned !== undefined) {
         if (batch.integration !== undefined && batch.top !== undefined && (extras.merged ?? []).length > 0) {
-          const review = await checkMerged($, { goal, top: batch.top, base: batch.base ?? 'HEAD', integration: batch.integration, models, retries, stallMs, signal: batchSignal })
+          const review = await checkMerged($, { goal, top: batch.top, base: batch.base ?? 'HEAD', integration: batch.integration, checker, retries, stallMs, signal: batchSignal })
           check = checkText(review, 'Gemini is not connected, so the merged result was not checked.')
         } else check = checkText(undefined, 'Nothing was merged, so there was no merged result to check.')
       }

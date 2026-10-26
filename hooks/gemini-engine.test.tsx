@@ -209,3 +209,14 @@ test('goal mode needs Gemini, and a batch needs tasks or a goal', async ($, on) 
   expect(String((empty as any).deny)).toContain('needs tasks, or a goal')
   expect(spawned.length).toBe(0)
 })
+
+test('a checker named in the call plans with that model and level', async ($, on) => {
+  const spawned: SpawnCall[] = []
+  engine(on, { spawned, agyRun: () => ({ stdout: PLAN }) })
+  await start($)
+
+  const ran = await $.tool.call(batch({ title: 'goal', goal: 'build both parts', isolation: 'none', checker: 'gemini-3.8-flash', checkerEffort: 'high' }) as any)
+  expect((ran as any).deny).toBeUndefined()
+  expect(flag(spawned[0]!.argv, '--model')).toBe('gemini-3.8-flash-high')
+  expect(String((ran as any).result)).toContain('## Plan (agy/gemini-3.8-flash)')
+})
