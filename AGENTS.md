@@ -1,3 +1,17 @@
+# MANDATORY: Choose the correct host variant before installation
+
+This is a **dual-variant project**. Choose based on the **user's requested destination app**, NOT based on whether the installing agent is Claude or Codex.
+
+- Target **Claude Code** → install from repository **root**, with `.claude-plugin/`, `hooks/` and `types/`. This version is on `main`.
+- Target **Codex desktop / CLI** → install **`codex-companion/`** using its portable manifest, skill and MCP server. This is currently **draft PR #3** on `feat/codex-desktop-companion`, not on `main`.
+- **A Codex agent installing into Claude must choose Claude. A Claude agent installing into Codex must choose Codex.** If target is not known, ask; do not install both or substitute.
+- Begin with **[docs/INSTALLATION.md](docs/INSTALLATION.md)**; check the actual manifest and installed CLI; report host-specific smoke tests.
+- Do not claim draft Codex features (embedded sidebar, remaining quota, dual-Codex delegation) work, and do not handle secrets or merge code without permission.
+
+The remaining sections of AGENTS.md document the **Claude Code root implementation**.
+
+---
+
 # Working on opencode-go
 
 opencode-go is a Claude Code mod (a function-hooks plugin). It lets Claude delegate tasks to OpenCode Go models through the `opencode` CLI. The README describes its features; this file is for agents changing the code.
