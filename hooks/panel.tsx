@@ -1,6 +1,6 @@
 import type { ElementTable, RenderElement, RenderSurface } from 'claude-code'
 
-import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, LocalServer, ModelHealth, Phase, PlanUse, Preset, Preview, Spend, WorkerModel } from '../types'
+import type { Batch, BatchSummary, BatchTask, Catalog, Effort, Job, LocalServer, ModelHealth, Phase, PlanUse, Preset, Preview, ProviderUsageSnapshot, Spend, UsageWindow, WorkerModel } from '../types'
 import { colorOf, isFree, isGemini, isPlan, price, worker } from './catalog'
 import { quotaText, usedIn } from './quota'
 import { cancel } from './control'
@@ -33,6 +33,8 @@ export type PanelView = {
   planQuota: number
   /** Google AI Pro (Antigravity) runs in the last 5 hours */
   geminiUses?: PlanUse[]
+  providerUsage: ProviderUsageSnapshot[]
+  providerUsageRefreshing: boolean
 }
 
 // The panel's buttons, as callbacks register.tsx builds around `$`.
@@ -54,6 +56,31 @@ export type PanelActions = {
 }
 
 export const ICONS: Record<BatchTask['status'], string> = { pending: '○', running: '◐', done: '●', failed: '✕', skipped: '–', cancelled: '⊘' }
+
+const USAGE_LABELS: Record<ProviderUsageSnapshot['provider'], string> = {
+  'opencode-go': 'OpenCode Go',
+  'codex-pro-1': 'Codex Pro 1',
+  'codex-pro-2': 'Codex Pro 2',
+  'google-ai-pro': 'Google AI Pro',
+}
+
+function usageBar(window: UsageWindow): string | undefined {
+  if (window.percentRemaining === undefined) return undefined
+  const filled = Math.max(0, Math.min(10, Math.round(window.percentRemaining / 10)))
+  return `${'█'.repeat(filled)}${'░'.repeat(10 - filled)}`
+}
+
+function quotaReset(value: number | undefined): string | undefined {
+  if (value === undefined || !Number.isFinite(value)) return undefined
+  return new Date(value).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function usageStatus(snapshot: ProviderUsageSnapshot): string {
+  if (snapshot.status === 'available') return snapshot.measurement === 'server-reported' ? 'Server reading' : 'Connected · no structured quota'
+  if (snapshot.status === 'stale') return 'Stale'
+  if (snapshot.status === 'unauthenticated') return 'Unauthenticated'
+  return 'Unavailable'
+}
 
 // A card in the AGENTS section: a running delegate job, or a running task of a batch.
 type Agent = {
@@ -138,6 +165,51 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
   const historyOpen = folds.history ?? false
+  const usageRows = (v.providerUsage ?? []).map(snapshot => {
+    const key = `subscription:${snapshot.provider}`
+    const open = folds[key] ?? false
+    const color = snapshot.status === 'available' ? 'success' : snapshot.status === 'stale' ? 'warning' : 'error'
+    const account = snapshot.accountId === 'default' ? '' : ` · ${snapshot.accountId}`
+    const windows = snapshot.windows.map((window, index) => {
+      const bar = usageBar(window)
+      const usage = window.percentRemaining !== undefined
+        ? `${Math.round(window.percentRemaining)}% remaining`
+        : window.remaining !== undefined
+          ? `${window.remaining} remaining`
+          : 'quota value unavailable'
+      const reset = quotaReset(window.resetsAt)
+      return (
+        <Text key={`${key}:window:${index}`} dimColor size="caption">
+          {`${window.model ? `${window.model} · ` : ''}${window.label ?? 'Quota'}${window.durationMins ? ` (${window.durationMins} min)` : ''} · `}
+          {bar ? <Text color="success">{bar} </Text> : null}
+          {`${usage}${reset ? ` · resets ${reset}` : ''}`}
+        </Text>
+      )
+    })
+    return (
+      <Box key={key} flexDirection="column">
+        <Button plain onPress={() => act.fold(key, !open)}>
+          <Text bold color={color}>{open ? '▾ ' : '▸ '}{USAGE_LABELS[snapshot.provider]}{account}</Text>
+          <Text dimColor> · {usageStatus(snapshot)}</Text>
+          {snapshot.lastSuccessAt !== undefined && <Text dimColor> · {ageOf(snapshot.lastSuccessAt)}</Text>}
+        </Button>
+        {snapshot.windows.length > 0 && <Box flexDirection="column" paddingLeft={2}>{windows}</Box>}
+        {snapshot.windows.length === 0 && snapshot.status === 'available' && (
+          <Text dimColor size="caption">No server-reported percentage or remaining amount is available.</Text>
+        )}
+        {open && (
+          <Box flexDirection="column" paddingLeft={2}>
+            <Text dimColor size="caption">{`Connection: ${snapshot.connection} · Authentication: ${snapshot.authentication}`}</Text>
+            {snapshot.planType && <Text dimColor size="caption">{`Plan: ${snapshot.planType}`}</Text>}
+            {snapshot.ordinaryUsageAllowed !== undefined && <Text dimColor size="caption">{`Server ordinary usage flag: ${snapshot.ordinaryUsageAllowed ? 'allowed' : 'blocked'}`}</Text>}
+            <Text dimColor size="caption">{`Source: ${snapshot.source}`}</Text>
+            {snapshot.lastSuccessAt !== undefined && <Text dimColor size="caption">{`Last successful refresh: ${new Date(snapshot.lastSuccessAt).toLocaleString()}`}</Text>}
+            {snapshot.diagnostic && <Text color={snapshot.status === 'available' ? 'subtle' : 'warning'} size="caption">{snapshot.diagnostic}</Text>}
+          </Box>
+        )}
+      </Box>
+    )
+  })
 
   const dot = (id: string) => {
     const rating = rate(healthData[id])
@@ -485,11 +557,16 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
 
       {(!isMobile || allOpen) && section('free', 'FREE', 'success', 'No cost while OpenCode offers them', free, m => (m.source === 'go' ? 'Go' : 'Zen'))}
       {(!isMobile || allOpen) && section('paid', 'PAID', 'warning', 'Uses your Go allowance · $ in/out per Mtok', paid, m => `${price(m.input)}/${price(m.output)}`)}
-      {(!isMobile || allOpen) && section('gemini', 'GEMINI', '#4285F4', `Uses your Google AI Pro plan via Antigravity · ${usedIn(v.geminiUses ?? [], Date.now())} runs in the last 5 h`, gemini, m => (m.maker === 'Google' ? 'AI Pro' : m.maker))}
-      {(!isMobile || allOpen) && section('zai', 'Z.AI PLAN', 'suggestion', `Uses your Z.AI Coding Plan quota · ${quotaText(v.planUses, v.planQuota, Date.now())}`, plan, m => (m.id.startsWith('zhipuai') ? 'bigmodel.cn' : 'z.ai'))}
+      <Box flexDirection="column">
+        <Text dimColor size="caption">SUBSCRIPTION USAGE {v.providerUsageRefreshing ? '· refreshing' : ''}</Text>
+        {usageRows.length === 0 ? <Text dimColor size="caption">No server readings yet. Refresh to check connected providers.</Text> : usageRows}
+        <Text dimColor size="caption">Percentages describe the returned quota window; they do not guarantee that a next request will be available.</Text>
+      </Box>
+      {(!isMobile || allOpen) && section('gemini', 'GEMINI', '#4285F4', `Google AI Pro via Antigravity · local run count ${usedIn(v.geminiUses ?? [], Date.now())} in the last 5 h (not remaining allowance)`, gemini, m => (m.maker === 'Google' ? 'AI Pro' : m.maker))}
+      {(!isMobile || allOpen) && section('zai', 'Z.AI PLAN', 'suggestion', `Local task count · ${quotaText(v.planUses, v.planQuota, Date.now())}; not a server-reported remaining allowance`, plan, m => (m.id.startsWith('zhipuai') ? 'bigmodel.cn' : 'z.ai'))}
 
       <Button key="refresh" plain dimColor onPress={() => act.refresh()}>
-        ↻ Refresh models
+        ↻ Refresh models and subscription usage
       </Button>
     </Box>
   )

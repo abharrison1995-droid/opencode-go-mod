@@ -5,7 +5,7 @@
       "type": "stdio",
       "command": "node",
       "args": [
-        "${PLUGIN_ROOT}/server/index.mjs"
+        "${PLUGIN_ROOT}/server/dist/index.mjs"
       ],
       "cwd": "${PLUGIN_ROOT}"
     }

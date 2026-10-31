@@ -1,9 +1,16 @@
 import { expect, test } from 'claude-code/testing'
-import { accountHome, codexArgv, parseCodexEvents } from './codex'
+import { accountHome, codexArgv, codexVendorCandidates, parseCodexEvents } from './codex'
 
 test('two Pro profiles use independent isolated home directories', () => {
   expect(accountHome('C:/Users/Alex', 'pro-1')).toBe('C:/Users/Alex/.codex-profiles/pro-1')
   expect(accountHome('C:/Users/Alex', 'pro-2')).toBe('C:/Users/Alex/.codex-profiles/pro-2')
+})
+
+test('Windows Codex discovery prefers the ARM64 vendor binary on ARM64 and retains x64 fallback', () => {
+  const paths = codexVendorCandidates('C:/Users/Alex/AppData/Roaming', 'C:/Users/Alex', 'ARM64')
+  expect(paths[0]).toContain('aarch64-pc-windows-msvc')
+  expect(paths[1]).toContain('x86_64-pc-windows-msvc')
+  expect(paths).toHaveLength(4)
 })
 
 test('Codex defaults to read-only without an explicit edit request', () => {

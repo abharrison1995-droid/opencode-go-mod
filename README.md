@@ -1,6 +1,6 @@
 # OpenCode Go Mod — Claude Code AND Codex variants
 
-> **HOST SELECTION FOR INSTALLERS:** There are **two versions**, depending on where the user wants the mod installed. **Claude Code:** install the package at this repository's **root** (`.claude-plugin/`). **Codex desktop / CLI:** install the separate **`codex-companion/`** package, currently on [draft PR #3](https://github.com/abharrison1995-droid/opencode-go-mod/pull/3) / branch `feat/codex-desktop-companion`, **not yet on `main`**. A Claude agent installing for Codex must choose Codex; a Codex agent installing for Claude must choose Claude. **Never swap the package types.**
+> **HOST SELECTION FOR INSTALLERS:** There are **two versions**, depending on where the user wants the mod installed. **Claude Code:** install the package at this repository's **root** (`.claude-plugin/`). **Codex desktop / CLI:** install the separate **`codex-companion/`** package, currently on review branch `codex/agent-subscription-bridge`, **not yet on `main`**. A Claude agent installing for Codex must choose Codex; a Codex agent installing for Claude must choose Claude. **Never swap the package types.**
 
 | Destination | Correct package | Installation guide |
 | --- | --- | --- |

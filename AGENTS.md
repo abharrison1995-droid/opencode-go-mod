@@ -3,10 +3,11 @@
 This is a **dual-variant project**. Choose based on the **user's requested destination app**, NOT based on whether the installing agent is Claude or Codex.
 
 - Target **Claude Code** → install from repository **root**, with `.claude-plugin/`, `hooks/` and `types/`. This version is on `main`.
-- Target **Codex desktop / CLI** → install **`codex-companion/`** using its portable manifest, skill and MCP server. This is currently **draft PR #3** on `feat/codex-desktop-companion`, not on `main`.
+- Target **Codex desktop / CLI** → install **`codex-companion/`** using its portable manifest, skill and MCP server. The integrated package is on the review branch `codex/agent-subscription-bridge`; it is not on `main` until the owner accepts the draft PR.
 - **A Codex agent installing into Claude must choose Claude. A Claude agent installing into Codex must choose Codex.** If target is not known, ask; do not install both or substitute.
 - Begin with **[docs/INSTALLATION.md](docs/INSTALLATION.md)**; check the actual manifest and installed CLI; report host-specific smoke tests.
-- Do not claim draft Codex features (embedded sidebar, remaining quota, dual-Codex delegation) work, and do not handle secrets or merge code without permission.
+- The Codex variant has MCP tools and an optional loopback usage dashboard; it does not use Claude's sidebar API. Server-reported usage adapters and two-profile Codex dispatch are implemented in the integration branch, but still need live authenticated Windows verification. Never present local run counts as remaining allowance.
+- Do not handle secrets or merge code without permission.
 
 The remaining sections of AGENTS.md document the **Claude Code root implementation**.
 

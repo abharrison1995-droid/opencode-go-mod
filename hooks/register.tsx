@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
-import type { Batch, BatchSummary, PlanUse, BatchTask, Phase, Catalog, DecideInput, DelegateBatchInput, DelegateInput, Effort, Job, LocalName, LocalServer, ModelHealth, Preset, Preview, Spend, WorkerModel } from '../types'
+import type { Batch, BatchSummary, PlanUse, BatchTask, Phase, Catalog, DecideInput, DelegateBatchInput, DelegateInput, Effort, Job, LocalName, LocalServer, ModelHealth, Preset, Preview, ProviderUsageSnapshot, Spend, WorkerModel } from '../types'
 import { batchSpecs, checkTasks, commitTask, prepareDir, rememberBatch, runBatch } from './batch'
 import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult } from './batch'
 import { costsMoney, findOpencode, fullId, isFree, isPlan, loadCatalog, price, readCache, worker, writeCache } from './catalog'
@@ -30,6 +30,7 @@ import { planCalls, prune, quotaMessage, resetAt, usedIn } from './quota'
 import { homeOf } from './platform'
 import { runCodex } from './codex'
 import type { CodexRequest } from './codex'
+import { fetchProviderUsage } from './usage'
 
 const catalog = atom({ plugin: 'opencode-go', key: 'catalog' } as const, { status: 'loading', models: [] } as Catalog)
 const picked = atom({ plugin: 'opencode-go', key: 'model' } as const, '')
@@ -50,6 +51,8 @@ const preview = atom({ plugin: 'opencode-go', key: 'preview' } as const, null as
 const local = atom({ plugin: 'opencode-go', key: 'local' } as const, {} as Record<string, LocalServer>)
 const planUse = atom({ plugin: 'opencode-go', key: 'planUse' } as const, [] as PlanUse[])
 const geminiUse = atom({ plugin: 'opencode-go', key: 'geminiUse' } as const, [] as PlanUse[])
+const providerUsage = atom({ plugin: 'opencode-go', key: 'providerUsage' } as const, [] as ProviderUsageSnapshot[])
+const providerUsageRefreshing = atom({ plugin: 'opencode-go', key: 'providerUsageRefreshing' } as const, false)
 
 const TOOL = 'mcp__opencode-go__delegate'
 const BATCH_TOOL = 'mcp__opencode-go__delegate_batch'
@@ -58,6 +61,35 @@ const CODEX_TOOL = 'mcp__opencode-go__delegate_codex'
 const PANE = 'opencode'
 
 let sessionCwd = ''
+let usageRefreshInFlight = false
+let nextUsageRefreshAt = 0
+
+async function refreshProviderUsage($: EngineInterface, directory = sessionCwd, force = false) {
+  if (usageRefreshInFlight || directory === '') return
+  const now = Date.now()
+  if (!force && now < nextUsageRefreshAt) return
+  usageRefreshInFlight = true
+  nextUsageRefreshAt = now + 5 * 60_000
+  await update($, providerUsageRefreshing, () => true)
+  try {
+    const snapshots = await fetchProviderUsage($, directory, force)
+    await update($, providerUsage, () => snapshots)
+  } catch (error) {
+    const previous = await read($, providerUsage)
+    const refreshed = previous.length > 0
+      ? previous.map(snapshot => ({ ...snapshot, status: 'stale' as const, diagnostic: error instanceof Error ? error.message : String(error), checkedAt: Date.now() }))
+      : [
+        { provider: 'opencode-go', accountId: 'default', status: 'unavailable', connection: 'unknown', authentication: 'unknown', measurement: 'unavailable', source: 'OpenCode local API GET /api/experimental/usage/limits', checkedAt: Date.now(), windows: [], diagnostic: error instanceof Error ? error.message : String(error) },
+        { provider: 'codex-pro-1', accountId: 'pro-1', status: 'unavailable', connection: 'unknown', authentication: 'unknown', measurement: 'unavailable', source: 'Codex app-server JSON-RPC account/rateLimits/read', checkedAt: Date.now(), windows: [], diagnostic: error instanceof Error ? error.message : String(error) },
+        { provider: 'codex-pro-2', accountId: 'pro-2', status: 'unavailable', connection: 'unknown', authentication: 'unknown', measurement: 'unavailable', source: 'Codex app-server JSON-RPC account/rateLimits/read', checkedAt: Date.now(), windows: [], diagnostic: error instanceof Error ? error.message : String(error) },
+        { provider: 'google-ai-pro', accountId: 'default', status: 'unavailable', connection: 'unknown', authentication: 'unknown', measurement: 'unavailable', source: 'Antigravity CLI agy --print /usage --output-format json', checkedAt: Date.now(), windows: [], diagnostic: error instanceof Error ? error.message : String(error) },
+      ] as ProviderUsageSnapshot[]
+    await update($, providerUsage, () => refreshed)
+  } finally {
+    usageRefreshInFlight = false
+    await update($, providerUsageRefreshing, () => false)
+  }
+}
 
 function describe(models: WorkerModel[], health: Record<string, ModelHealth> = {}) {
   const { free, paid, plan, gemini } = worker(models)
@@ -721,6 +753,7 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     const started = await next(e)
     sessionCwd = e.cwd
+    nextUsageRefreshAt = 0
     const storedModel = await $.store.get('model')
     const storedEffort = await $.store.get('effort')
     if (typeof storedModel === 'string' && (await read($, picked)) === '') await update($, picked, () => storedModel)
@@ -768,6 +801,7 @@ export const register: Register = (on, options) => {
       },
     })
     void refreshLocal($)
+    void refreshProviderUsage($, e.cwd)
     await $.command.register({ name: 'opencode', description: 'OpenCode panel and settings: /opencode [model <name> | effort <level> | chat on|off | models | status | help]' })
     void refresh($)
     void $.ui.open({ id: PANE, title: 'OpenCode' })
@@ -1567,6 +1601,7 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
   }))
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
+    if (!usageRefreshInFlight && Date.now() >= nextUsageRefreshAt) void refreshProviderUsage($, sessionCwd)
     const total = await $.store.get('spendTotal')
     const view: PanelView = {
       cat: await read($, catalog),
@@ -1589,6 +1624,8 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       planUses: await read($, planUse),
       planQuota: Number(options.zaiQuota ?? 0) || 0,
       geminiUses: await read($, geminiUse),
+      providerUsage: await read($, providerUsage),
+      providerUsageRefreshing: await read($, providerUsageRefreshing),
     }
     return panel($.ui.resolve(e), e.surface, view, {
       pick: id => void pick($, id),
@@ -1604,7 +1641,10 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
       resume: (batchId, taskId) => void resumeTask($, batchId, taskId),
       toggleShowAll: () => void update($, showAll, v => !v),
       search: value => void update($, query, () => value),
-      refresh: () => void refresh($),
+      refresh: () => {
+        void refresh($)
+        void refreshProviderUsage($, sessionCwd, true)
+      },
     })
   })
 }

@@ -1,5 +1,6 @@
 import type { EngineInterface } from 'claude-code'
 import { homeOf, isExe, isWindows, whereAll } from './platform'
+import { codexExecArgs, codexProfileHome, parseCodexEvents as parseSharedCodexEvents } from '../bridge-core/codex.mjs'
 
 export type CodexAccount = 'pro-1' | 'pro-2'
 export type CodexRequest = {
@@ -12,8 +13,18 @@ export type CodexRequest = {
 }
 export type CodexOutcome = { ok: boolean; answer: string; threadId?: string; error?: string; exitCode: number; account: CodexAccount }
 
-export function accountHome(home: string, account: CodexAccount): string {
-  return `${home.replace(/[\\/]+$/, '')}/.codex-profiles/${account}`
+export const accountHome = codexProfileHome
+
+export function codexVendorCandidates(root: string | undefined, home: string | undefined, architecture?: string): string[] {
+  const isArm64 = /(?:arm64|aarch64)/i.test(architecture ?? '')
+  const targets = isArm64
+    ? ['aarch64-pc-windows-msvc', 'x86_64-pc-windows-msvc']
+    : ['x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc']
+  const locations = [
+    ...(root ? [`${root}/npm/node_modules/@openai/codex/vendor`] : []),
+    ...(home ? [`${home}/AppData/Roaming/npm/node_modules/@openai/codex/vendor`] : []),
+  ]
+  return locations.flatMap(location => targets.map(target => `${location}/${target}/codex/codex.exe`))
 }
 
 /** Use real binaries, never the npm .cmd shim that process.run cannot spawn directly. */
@@ -24,38 +35,19 @@ export async function findCodex($: EngineInterface): Promise<string | undefined>
   if (exe) return exe
   const root = await $.env.get('APPDATA')
   const home = await homeOf($)
-  const candidates = [
-    ...(root ? [`${root}/npm/node_modules/@openai/codex/vendor/x86_64-pc-windows-msvc/codex/codex.exe`] : []),
-    ...(home ? [`${home}/AppData/Roaming/npm/node_modules/@openai/codex/vendor/x86_64-pc-windows-msvc/codex/codex.exe`] : []),
-  ]
+  const architecture = [await $.env.get('PROCESSOR_ARCHITECTURE'), await $.env.get('PROCESSOR_ARCHITEW6432')].filter(Boolean).join(' ')
+  const candidates = codexVendorCandidates(root, home, architecture)
   for (const path of candidates) if (await $.fs.stat(path).catch(() => undefined)) return path
   return undefined
 }
 
 export function codexArgv(bin: string, o: CodexRequest): string[] {
-  const argv = [bin, 'exec', '--json', '--sandbox', o.readOnly === false ? 'workspace-write' : 'read-only']
-  if (o.model?.trim()) argv.push('-m', o.model.trim())
-  if (o.effort) argv.push('-c', `model_reasoning_effort="${o.effort}"`)
-  argv.push('-C', o.cwd, o.prompt)
-  return argv
+  return codexExecArgs(bin, o)
 }
 
 /** Codex exec JSONL contains lifecycle events and agent messages. Never treat a failed exit as success. */
 export function parseCodexEvents(stdout: string): { answer: string; threadId?: string; error?: string; completed: boolean } {
-  let answer = ''
-  let threadId: string | undefined
-  let error: string | undefined
-  let completed = false
-  for (const line of stdout.split(/\r?\n/)) {
-    if (!line.trim()) continue
-    let event: any
-    try { event = JSON.parse(line) } catch { continue }
-    if (event.type === 'thread.started' && typeof event.thread_id === 'string') threadId = event.thread_id
-    if (event.type === 'item.completed' && event.item?.type === 'agent_message' && typeof event.item.text === 'string') answer = event.item.text
-    if (event.type === 'turn.completed') completed = true
-    if (event.type === 'turn.failed' || event.type === 'error') error = String(event.error?.message ?? event.message ?? 'Codex failed')
-  }
-  return { answer, ...(threadId ? { threadId } : {}), ...(error ? { error } : {}), completed }
+  return parseSharedCodexEvents(stdout)
 }
 
 export async function runCodex($: EngineInterface, o: CodexRequest): Promise<CodexOutcome> {
