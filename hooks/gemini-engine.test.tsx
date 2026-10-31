@@ -61,7 +61,7 @@ function engine(on: any, o: Options = {}) {
   on('process.spawn', async function* (_: any, e: any) {
     spawned.push({ argv: [...e.argv], cwd: e.cwd })
     if (e.argv[0] === AGY) {
-      const out = o.agyRun?.(e.argv, ++agyRuns) ?? { stdout: 'gemini did it' }
+      const out = o.agyRun?.(e.argv, ++agyRuns) ?? { stdout: JSON.stringify({ status: 'SUCCESS', response: 'gemini did it' }) }
       if (out.stdout) yield { stream: 'stdout', text: out.stdout }
       if (out.stderr) yield { stream: 'stderr', text: out.stderr }
       return { value: { code: out.code ?? 0, signal: null } }
@@ -134,7 +134,7 @@ test('a quota-limited agy run resumes its conversation', { options: { autoRetrie
   const spawned: SpawnCall[] = []
   engine(on, {
     spawned,
-    agyRun: (_, n) => (n === 1 ? { stderr: 'RESOURCE_EXHAUSTED: quota exceeded', code: 1 } : { stdout: 'finished' }),
+    agyRun: (_, n) => (n === 1 ? { stderr: 'RESOURCE_EXHAUSTED: quota exceeded', code: 1 } : { stdout: JSON.stringify({ status: 'SUCCESS', response: 'finished' }) }),
   })
   await start($)
 
@@ -170,7 +170,7 @@ const PLAN = JSON.stringify({
 
 test('goal mode has Gemini plan the tasks, then runs them in order', async ($, on) => {
   const spawned: SpawnCall[] = []
-  engine(on, { spawned, agyRun: () => ({ stdout: PLAN }) })
+  engine(on, { spawned, agyRun: () => ({ stdout: JSON.stringify({ status: 'SUCCESS', response: PLAN }) }) })
   await start($)
 
   const ran = await $.tool.call(batch({ title: 'goal', goal: 'build both parts', isolation: 'none' }) as any)
@@ -190,7 +190,7 @@ test('goal mode has Gemini plan the tasks, then runs them in order', async ($, o
 
 test('goal mode is refused with the planner\'s answer when it gives no plan', async ($, on) => {
   const spawned: SpawnCall[] = []
-  engine(on, { spawned, agyRun: () => ({ stdout: 'I would rather chat.' }) })
+  engine(on, { spawned, agyRun: () => ({ stdout: JSON.stringify({ status: 'SUCCESS', response: 'I would rather chat.' }) }) })
   await start($)
 
   const refused = await $.tool.call(batch({ title: 'goal', goal: 'do things', isolation: 'none' }) as any)
@@ -213,7 +213,7 @@ test('goal mode needs Gemini, and a batch needs tasks or a goal', async ($, on) 
 
 test('a checker named in the call plans with that model and level', async ($, on) => {
   const spawned: SpawnCall[] = []
-  engine(on, { spawned, agyRun: () => ({ stdout: PLAN }) })
+  engine(on, { spawned, agyRun: () => ({ stdout: JSON.stringify({ status: 'SUCCESS', response: PLAN }) }) })
   await start($)
 
   const ran = await $.tool.call(batch({ title: 'goal', goal: 'build both parts', isolation: 'none', checker: 'gemini-3.8-flash', checkerEffort: 'high' }) as any)
@@ -225,7 +225,7 @@ test('a checker named in the call plans with that model and level', async ($, on
 test('Gemini planning shows as a running agent, gone once the plan is in', async ($, on) => {
   const spawned: SpawnCall[] = []
   const status: (string | undefined)[] = []
-  engine(on, { spawned, status, agyRun: () => ({ stdout: PLAN }) })
+  engine(on, { spawned, status, agyRun: () => ({ stdout: JSON.stringify({ status: 'SUCCESS', response: PLAN }) }) })
   await start($)
 
   await $.tool.call(batch({ title: 'goal', goal: 'build both parts', isolation: 'none' }) as any)

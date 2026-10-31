@@ -1,0 +1,21 @@
+{
+  "name": "agent-subscription-bridge-codex",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node server/build.mjs",
+    "test": "node --test server/runner.test.mjs server/dashboard.test.mjs server/history.test.mjs server/pipeline.test.mjs server/job-registry.test.mjs server/mcp.test.mjs ../bridge-core/usage.test.mjs",
+    "check": "node --check server/index.mjs && node --check server/runner.mjs && node --check server/dashboard.mjs && node --check server/history.mjs && node --check server/pipeline.mjs && node --check server/job-registry.mjs && node --check server/build.mjs && node --check shared/codex.mjs && node --check shared/usage.mjs && node --check ../bridge-core/usage-cli.mjs && node ../scripts/sync-codex-shared.mjs --check && node server/build.mjs --check && npm test",
+    "dashboard": "node server/dashboard.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2"
+  }
+}

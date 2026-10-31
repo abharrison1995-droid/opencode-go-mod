@@ -1,0 +1,10 @@
+---
+name: delegate
+description: Delegate a bounded coding or review task from Codex to locally authenticated OpenCode Go, Codex CLI profiles, Claude Code, or Antigravity agents.
+---
+
+Use bridge_status first to check configured binaries. The MCP tool delegate_agent takes an explicitly selected provider, absolute directory and self-contained prompt including file locations, constraints, and verification instructions. Codex calls require an explicit `pro-1` or `pro-2` profile; never rotate profiles automatically. Choose a model/reasoning level where needed. Use bridge_usage for server-reported readings and pass the active project as its absolute `directory` when requesting OpenCode Go; without that path, OpenCode is reported unavailable instead of using the plugin install directory. Use bridge_history for recent status metadata; history does not contain task prompts or responses.
+
+For a coding task that needs editing, use start_pipeline_job with explicit planner, implementer and independent reviewer providers plus an allow-listed verification command. The reviewer must be independent across every primary and fallback provider/account route. The pipeline creates an isolated branch/worktree from committed HEAD and leaves local source edits untouched. It preserves the worktree for owner review and never merges or pushes. Editing requires owner authorization and BRIDGE_ENABLE_WRITES=1 in the MCP server environment. Verification commands receive an environment allowlist, but their code is not OS-sandboxed and retains the user's filesystem permissions; use trusted repositories only. Use start_agent_job, get_agent_job and cancel_agent_job for cancellable individual tasks.
+
+An explicit single cross-provider fallback can be configured for missing CLI, authentication or rate-limit failures. Do not switch between Codex profiles, automatically retry an ordinary provider failure, or use another account to bypass a usage restriction. Do not access subscription credentials or invent quota fields. Codex uses the supported plugin/skill/MCP surfaces plus the optional loopback dashboard, not a Claude sidebar.

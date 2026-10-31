@@ -1,0 +1,20 @@
+{
+  "name": "harkuo-local",
+  "interface": {
+    "displayName": "harkuo.digital Local Plugins"
+  },
+  "plugins": [
+    {
+      "name": "agent-subscription-bridge",
+      "source": {
+        "source": "local",
+        "path": "./codex-companion"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_USE"
+      },
+      "category": "Developer Tools"
+    }
+  ]
+}

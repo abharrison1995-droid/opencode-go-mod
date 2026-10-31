@@ -32,7 +32,7 @@ test('Z.AI PLAN lists the plan models with this window’s use', async ($, on) =
   stand(on, new Map(), ZAI)
   const ui = await mount($)
   expect(await ui.find({ type: 'Text', text: /▾ Z.AI PLAN$/ })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: 'Uses your Z.AI Coding Plan quota · 0 model calls in the last 5 h' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Local task count · 0 model calls in the last 5 h; not a server-reported remaining allowance' })).toBeDefined()
   await ui.press({ key: 'zai:Z.ai' })
   expect(await ui.find({ key: 'model:zai-coding-plan/glm-5.3' })).toBeDefined()
   expect(await ui.find({ key: 'model:zai-coding-plan/glm-5.3-flash' })).toBeDefined()
@@ -42,7 +42,7 @@ test('Z.AI PLAN lists the plan models with this window’s use', async ($, on) =
 test('Z.AI PLAN shows use against the zaiQuota option', { options: { zaiQuota: 100 } }, async ($, on) => {
   stand(on, new Map<string, unknown>([['planUse', [{ at: Date.now() - 60_000, calls: 12 }]]]), ZAI)
   const ui = await mount($)
-  expect(await ui.find({ type: 'Text', text: 'Uses your Z.AI Coding Plan quota · 12/100 model calls in the last 5 h' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: 'Local task count · 12/100 model calls in the last 5 h; not a server-reported remaining allowance' })).toBeDefined()
   await ui.unmount()
 })
 

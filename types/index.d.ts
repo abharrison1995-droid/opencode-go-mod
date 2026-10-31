@@ -123,6 +123,39 @@ export type Spend = { session: number; runs: number }
 /** Model calls a finished run made on Z.AI Coding Plan models. */
 export type PlanUse = { at: number; calls: number }
 
+/** One server-reported provider quota window, or a partial provider detail when fields are absent. */
+export type UsageWindow = {
+  label?: string
+  durationMins?: number
+  percentUsed?: number
+  percentRemaining?: number
+  resetsAt?: number
+  model?: string
+  bucket?: string
+  remaining?: string | number
+  limit?: string | number
+  limited?: boolean
+}
+
+/** Read-only telemetry shared by the Claude and Codex host integrations. */
+export type ProviderUsageSnapshot = {
+  provider: 'opencode-go' | 'codex-pro-1' | 'codex-pro-2' | 'google-ai-pro'
+  accountId: string
+  status: 'available' | 'stale' | 'unavailable' | 'unauthenticated'
+  connection: 'connected' | 'disconnected' | 'unknown'
+  authentication: 'authenticated' | 'unauthenticated' | 'unknown'
+  measurement: 'server-reported' | 'provider-details' | 'unavailable'
+  source: string
+  checkedAt: number
+  lastSuccessAt?: number
+  windows: UsageWindow[]
+  planType?: string
+  ordinaryUsageAllowed?: boolean
+  workspaceName?: string
+  cliVersion?: string
+  diagnostic?: string
+}
+
 /** A local decision model the mod can serve. */
 export type LocalName = 'kev' | 'laya'
 
@@ -201,6 +234,7 @@ declare module 'claude-code' {
     'mcp__opencode-go__delegate': DelegateInput
     'mcp__opencode-go__delegate_batch': DelegateBatchInput
     'mcp__opencode-go__decide': DecideInput
+    'mcp__opencode-go__delegate_codex': { account: 'pro-1' | 'pro-2'; prompt: string; dir?: string; model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh'; readOnly?: boolean }
   }
 
   interface PluginState {
@@ -239,6 +273,10 @@ declare module 'claude-code' {
       planUse: PlanUse[]
       /** Google AI Pro (Antigravity) runs in the last 5 hours (also in $.store 'geminiUse') */
       geminiUse: PlanUse[]
+      /** Server-reported provider usage shown in the subscription panel */
+      providerUsage: ProviderUsageSnapshot[]
+      /** Whether a subscription reading refresh is in progress */
+      providerUsageRefreshing: boolean
     }
   }
 }

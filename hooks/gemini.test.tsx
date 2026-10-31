@@ -7,6 +7,7 @@ import {
   conversationIn,
   geminiChecker,
   parseAgyModels,
+  parseAgyResponse,
   parsePlan,
   planPrompt,
 } from './gemini'
@@ -82,6 +83,8 @@ test('agyArgv builds the headless command', () => {
     '--print=do the work',
     '--model',
     'gemini-4-argon-high',
+    '--output-format',
+    'json',
     '--dangerously-skip-permissions',
     '--sandbox',
     '--print-timeout',
@@ -248,4 +251,18 @@ test('the ladder puts the gemini rung after the free rungs', () => {
   expect(rungs[0]?.model).toBe('opencode-go/beam-free')
   expect(rungs[1]?.model).toBe('agy/gemini-4-argon')
   expect(rungs[1]?.effort).toBe('high')
+})
+
+
+test('agy model parser accepts aligned columns as well as tabs', () => {
+  const models = parseAgyModels('gemini-3.8-flash-high    Gemini 3.8 Flash (High)\n')
+  expect(models.map(m => m.id)).toEqual(['agy/gemini-3.8-flash'])
+})
+
+test('agy structured results reject failed statuses and retain useful error text', () => {
+  expect(parseAgyResponse(JSON.stringify({ status: 'SUCCESS', response: 'done' })).response).toBe('done')
+  const bad = parseAgyResponse(JSON.stringify({ status: 'ERROR', response: 'partial', error: 'quota exceeded' }))
+  expect(bad.error).toBe('quota exceeded')
+  expect(bad.status).toBe('ERROR')
+  expect(parseAgyResponse('not JSON').status).toBe('INVALID')
 })

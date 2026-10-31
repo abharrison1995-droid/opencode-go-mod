@@ -1,4 +1,13 @@
-# opencode-go
+# OpenCode Go Mod — Claude Code AND Codex variants
+
+> **HOST SELECTION FOR INSTALLERS:** There are **two versions**, depending on where the user wants the mod installed. **Claude Code:** install the package at this repository's **root** (`.claude-plugin/`). **Codex desktop / CLI:** install the separate **`codex-companion/`** package from draft [PR #5](https://github.com/abharrison1995-droid/opencode-go-mod/pull/5), branch `codex/agent-subscription-bridge` (**not yet on `main`**). Actions run [#41198897383](https://github.com/abharrison1995-droid/opencode-go-mod/actions/runs/41198897383) passed on revision `277ff3a`; desktop discovery is unverified. A Claude agent installing for Codex must choose Codex; a Codex agent installing for Claude must choose Claude. **Never swap the package types.**
+
+| Destination | Correct package | Installation guide |
+| --- | --- | --- |
+| **Claude Code** | Root `.claude-plugin/` | [Claude instructions](docs/INSTALLATION.md#for-a-fresh-claude-code-environment) |
+| **Codex** | `codex-companion/` (draft) | [Codex instructions](docs/INSTALLATION.md#for-a-fresh-codex-desktop--cli-environment) |
+
+Read **[docs/INSTALLATION.md](docs/INSTALLATION.md)** before installing or instructing another agent. The existing feature guide below primarily describes the **Claude variant**; the cross-host section records the Codex companion's current draft status.
 
 A Claude Code mod that lets Claude delegate tasks to cheaper models through the `opencode` CLI: an [OpenCode Go](https://opencode.ai) subscription, Zen's free models, a [Z.AI Coding Plan](https://z.ai) if you have one, and Gemini on a Google AI Pro plan through the Antigravity CLI. Claude plans and reviews; workers do the routine work. Gemini can also take the planning and checking off Claude's hands (goal mode).
 
@@ -207,4 +216,46 @@ Ratings show as the panel's health dots in the free and paid model lists, as `Un
 
 ## Developing
 
-`scripts/check.sh` runs everything a release must pass: `claude plugin validate .`, `claude plugin test .`, the scripts' Python tests, and `scripts/typecheck.sh`. GitHub Actions runs all but the type-check on every push and pull request (the engine types it needs exist only where Claude Code has run). AGENTS.md describes the layout and the rules the validator enforces.
+`scripts/check.sh` runs the root Claude checks: `claude plugin validate .`, `claude plugin test .`, the Python script tests, and `scripts/typecheck.sh`. GitHub Actions also checks host routing, the packaged Codex MCP bundle and its Node tests. The separate type-check needs Claude host declarations and is not run by CI. See [AGENTS.md](AGENTS.md) for the layout and validator rules.
+
+## Cross-host subscription usage (integration draft)
+
+The Claude panel has a **SUBSCRIPTION USAGE** section for OpenCode Go, Codex Pro 1/2 and Google AI Pro. The Codex companion exposes the same telemetry through `bridge_usage` and an optional loopback dashboard. OpenCode usage is directory-scoped: pass an absolute active project `directory` to `bridge_usage`, or OpenCode is reported unavailable rather than queried from the plugin directory. Z.AI model selection remains supported through OpenCode, but there is no dedicated Z.AI quota adapter. Local run counts are labeled estimates; the bridge never invents server quota percentages or reset times.
+
+The telemetry and full Codex companion are on draft [PR #5](https://github.com/abharrison1995-droid/opencode-go-mod/pull/5), not `main`. Current live provider results and exact verification limits are recorded in [docs/INTEGRATION-AUDIT.md](docs/INTEGRATION-AUDIT.md).
+
+## Dual Codex Subscription Bridge (draft)
+
+The plugin registers `delegate_codex`, allowing Claude to delegate a read-only review or an editing task to **either of two explicitly selected ChatGPT-authenticated Codex CLI profiles**. No OpenAI API key is needed when Codex is authenticated with ChatGPT. The profiles share neither login state nor Codex sessions. The bridge deliberately does not alternate accounts automatically to bypass usage restrictions.
+
+### Windows 11 setup
+
+Install the official Codex CLI first. Ensure a native `codex.exe` is available (rather than only an npm `.cmd` shim). In PowerShell, create separate home directories and sign in separately:
+
+```powershell
+$base = Join-Path $HOME '.codex-profiles'
+$pro1 = Join-Path $base 'pro-1'
+$pro2 = Join-Path $base 'pro-2'
+New-Item -ItemType Directory -Force $pro1, $pro2 | Out-Null
+$env:CODEX_HOME = $pro1
+codex login
+$env:CODEX_HOME = $pro2
+codex login
+Remove-Item Env:CODEX_HOME
+```
+
+Use the first ChatGPT account for the first login and the second account for the second login. Never commit either profile or its authentication files; both stay under your home folder. Check which executable is found with `where.exe codex`.
+
+### Calling the tool
+
+Claude invokes `mcp__opencode-go__delegate_codex` with `account: "pro-1"` or `"pro-2"`, `prompt`, optional `dir`, `model` and `effort`. `readOnly` defaults to true; set it false only to authorize workspace editing. The tool runs `codex exec --json` in the specified directory and returns the final answer, thread id if available, or a failure diagnostic. Different accounts may run in parallel, but **do not send simultaneous editing agents into the same checkout**; isolate worktrees before invoking them.
+
+Codex CLI subscription entitlements, rate limits, supported models and effort levels can change. This Claude-side tool does not promise specific quota amounts or automatically switch accounts on exhaustion; it is a direct, single-agent integration and does not join Claude's batch scheduler or automatic ladder. The separate Codex companion in draft PR #5 provides its own asynchronous jobs, worktree pipeline and subscription dashboard.
+
+### Validation before merge
+
+- Run `scripts/check.sh` and validate against your actual installed Claude Code plugin engine.
+- Run both account logins and verify each profile independently in the same environment as the Claude plugin.
+- Run read-only on both accounts, an explicitly approved editing task in an isolated test repository, and inspect the JSONL result.
+- Test invalid login, missing CLI, unsupported model/effort and rate-limit failure handling on Windows 11 and Linux.
+- Verify paths containing spaces, cancellation/timeout behavior, credentials redaction, and parallel independent profiles.

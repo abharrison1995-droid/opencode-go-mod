@@ -24,3 +24,9 @@ jobs:
         run: claude plugin test .
       - name: Test scripts
         run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Validate host packages
+        run: node scripts/validate-host-packages.mjs
+      - name: Test Codex MCP and usage engine
+        run: |
+          npm ci --prefix codex-companion
+          npm run check --prefix codex-companion
