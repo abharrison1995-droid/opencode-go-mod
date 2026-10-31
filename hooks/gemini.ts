@@ -44,8 +44,12 @@ export async function findAgy($: EngineInterface): Promise<string | undefined> {
 export function parseAgyModels(out: string): WorkerModel[] {
   const byId = new Map<string, WorkerModel>()
   for (const line of out.split('\n')) {
-    const [rawId, rawName] = line.split('\t').map(part => part?.trim() ?? '')
-    if (rawId === undefined || rawId === '' || rawName === undefined || rawName === '') continue
+    // agy versions print either tabs or columns padded with spaces.
+    const columns = /^\s*(\S+)(?:\t+| {2,})(.+?)\s*$/.exec(line)
+    if (columns === null) continue
+    const rawId = columns[1] ?? ''
+    const rawName = columns[2] ?? ''
+    if (rawId === '' || rawName === '') continue
     const level = LEVELS.find(l => rawId.endsWith(`-${l}`))
     const bare = level === undefined ? rawId : rawId.slice(0, -level.length - 1)
     const id = `${AGY_PREFIX}${bare}`
@@ -99,6 +103,8 @@ export function agyArgv(
     `--print=${prompt}`,
     '--model',
     agyModelArg(o.model, o.level),
+    '--output-format',
+    'json',
     '--dangerously-skip-permissions',
     '--sandbox',
     '--print-timeout',
@@ -108,6 +114,29 @@ export function agyArgv(
     ...(o.readOnly ? ['--mode', 'plan'] : []),
     ...(o.sessionId ? ['--conversation', o.sessionId] : []),
   ]
+}
+
+/** Decode agy's headless result envelope, rather than interpreting partial text as a completed run. */
+export function parseAgyResponse(out: string): { status: string; response: string; error?: string; conversationId?: string } {
+  let value: unknown
+  try {
+    value = JSON.parse(out)
+  } catch {
+    return { status: 'INVALID', response: '', error: 'Antigravity returned no valid JSON result. Check agy --version and its stderr.' }
+  }
+  if (value === null || typeof value !== 'object') {
+    return { status: 'INVALID', response: '', error: 'Antigravity returned an invalid result envelope.' }
+  }
+  const result = value as Record<string, unknown>
+  const status = typeof result.status === 'string' ? result.status : 'INVALID'
+  const response = typeof result.response === 'string' ? result.response : ''
+  const error = typeof result.error === 'string' && result.error.trim() !== ''
+    ? result.error
+    : status !== 'SUCCESS' ? `Antigravity ended with status ${status}.` : undefined
+  const conversationId = typeof result.conversation_id === 'string' && /^[0-9a-f-]{36}$/i.test(result.conversation_id)
+    ? result.conversation_id
+    : undefined
+  return { status, response, ...(error ? { error } : {}), ...(conversationId ? { conversationId } : {}) }
 }
 
 /** The conversation a run started, from its log: what `--conversation` resumes. */
