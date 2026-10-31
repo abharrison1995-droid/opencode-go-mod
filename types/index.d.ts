@@ -273,6 +273,10 @@ declare module 'claude-code' {
       planUse: PlanUse[]
       /** Google AI Pro (Antigravity) runs in the last 5 hours (also in $.store 'geminiUse') */
       geminiUse: PlanUse[]
+      /** Server-reported provider usage shown in the subscription panel */
+      providerUsage: ProviderUsageSnapshot[]
+      /** Whether a subscription reading refresh is in progress */
+      providerUsageRefreshing: boolean
     }
   }
 }
