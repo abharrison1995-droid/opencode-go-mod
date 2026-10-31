@@ -19,7 +19,13 @@
 /plugin marketplace add abharrison1995-droid/opencode-go-mod
 ```
 
-Inspect `.claude-plugin/marketplace.json` or list the marketplace plugins to confirm the exact `name@marketplace` identifier before invoking `/plugin install`. The root README also documents the existing installation command and UI method.
+The repository's `.claude-plugin/marketplace.json` identifies plugin **`opencode-go`** in marketplace **`opencode-go-mod`**. Install it with:
+
+```text
+/plugin install opencode-go@opencode-go-mod
+```
+
+If the installed marketplace metadata ever changes, verify those names instead of guessing. The root README also documents the existing installation command and UI method.
 4. Restart the Claude session; run `/opencode selftest`. Confirm the Claude side panel and delegation tools actually load. In a developer clone run `scripts/check.sh` as applicable.
 5. Do NOT install `codex-companion/` into Claude as a substitute.
 
@@ -34,7 +40,7 @@ npm install
 npm run check
 ```
 
-2. Read [Codex companion README](../codex-companion/README.md) and inspect `codex-companion/plugin.json`. The repo-scoped Codex marketplace is `.agents/plugins/marketplace.json`, pointing to `./codex-companion`; open the clone in a supported, trusted Codex client and verify the marketplace/plugin is discovered. Alternatively, configure the companion's local stdio MCP server according to the installed Codex client's documented MCP setup.
+2. Read [Codex companion README](../codex-companion/README.md) and inspect `codex-companion/plugin.json`. The repo-scoped Codex marketplace is `.agents/plugins/marketplace.json`, pointing to `./codex-companion`; register that local marketplace with `codex plugin marketplace add <absolute-path-to-opencode-go-mod>`, inspect it with `codex plugin marketplace list`, and open the clone in a supported, trusted Codex client to verify the marketplace/plugin is discovered. Alternatively, Codex supports `codex plugin marketplace add abharrison1995-droid/opencode-go-mod --ref feat/codex-desktop-companion` on a compatible CLI; this does not replace the Node dependency install or local smoke tests. Alternatively, configure the companion's local stdio MCP server according to the installed Codex client's documented MCP setup.
 3. Install/authenticate any delegated CLIs separately (OpenCode Go, Claude Code, Antigravity). Never copy authentication tokens into prompts, GitHub or plugin source.
 4. Verify MCP handshake, `bridge_status` and a **read-only** `delegate_agent` on a disposable project. Report actual errors. Do NOT claim a native Codex side panel, real quota telemetry, or dual Codex profile dispatch: these are not implemented in the current companion draft.
 5. Do NOT use Claude's root marketplace installation command for this package.
