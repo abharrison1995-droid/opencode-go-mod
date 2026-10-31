@@ -201,6 +201,7 @@ declare module 'claude-code' {
     'mcp__opencode-go__delegate': DelegateInput
     'mcp__opencode-go__delegate_batch': DelegateBatchInput
     'mcp__opencode-go__decide': DecideInput
+    'mcp__opencode-go__delegate_codex': { account: 'pro-1' | 'pro-2'; prompt: string; dir?: string; model?: string; effort?: 'low' | 'medium' | 'high' | 'xhigh'; readOnly?: boolean }
   }
 
   interface PluginState {

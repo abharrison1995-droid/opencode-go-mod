@@ -28,6 +28,8 @@ import { reviewTask } from './review'
 import { formatChecks, selfTest } from './selftest'
 import { planCalls, prune, quotaMessage, resetAt, usedIn } from './quota'
 import { homeOf } from './platform'
+import { runCodex } from './codex'
+import type { CodexRequest } from './codex'
 
 const catalog = atom({ plugin: 'opencode-go', key: 'catalog' } as const, { status: 'loading', models: [] } as Catalog)
 const picked = atom({ plugin: 'opencode-go', key: 'model' } as const, '')
@@ -52,6 +54,7 @@ const geminiUse = atom({ plugin: 'opencode-go', key: 'geminiUse' } as const, [] 
 const TOOL = 'mcp__opencode-go__delegate'
 const BATCH_TOOL = 'mcp__opencode-go__delegate_batch'
 const DECIDE_TOOL = 'mcp__opencode-go__decide'
+const CODEX_TOOL = 'mcp__opencode-go__delegate_codex'
 const PANE = 'opencode'
 
 let sessionCwd = ''
@@ -747,6 +750,23 @@ export const register: Register = (on, options) => {
 
     await registerTool($, [])
     await registerDecide($)
+    await $.tool.register({
+      name: 'delegate_codex',
+      description: 'Delegate work to either independently signed-in ChatGPT Pro Codex CLI profile. Select pro-1 or pro-2 explicitly. Default read-only, with opt-in workspace writes. Do not switch accounts to evade provider limits. Claude must independently verify edits.',
+      isDeferred: false,
+      inputSchema: {
+        type: 'object',
+        properties: {
+          account: { type: 'string', enum: ['pro-1', 'pro-2'] },
+          prompt: { type: 'string' },
+          dir: { type: 'string', description: 'Working folder, defaults to current project' },
+          model: { type: 'string', description: 'Optional Codex CLI model id' },
+          effort: { type: 'string', enum: ['low', 'medium', 'high', 'xhigh'] },
+          readOnly: { type: 'boolean', description: 'True by default; false allows workspace edits' },
+        },
+        required: ['account', 'prompt'],
+      },
+    })
     void refreshLocal($)
     await $.command.register({ name: 'opencode', description: 'OpenCode panel and settings: /opencode [model <name> | effort <level> | chat on|off | models | status | help]' })
     void refresh($)
@@ -977,6 +997,23 @@ The user's chosen worker is ${await current($, defaultModel)} at ${await read($,
     yield { kind: 'stop', stopReason, usage }
     return { turnId: e.turnId, index: e.index, answer, toolUses, stopReason, usage }
   })
+
+  on('tool.call', { tool: CODEX_TOOL }, async ($, e) => {
+    const input = e as CodexRequest & { dir?: string }
+    if (input.account !== 'pro-1' && input.account !== 'pro-2') return { deny: 'Choose pro-1 or pro-2.' }
+    if (typeof input.prompt !== 'string' || input.prompt.trim() === '') return { deny: 'Provide a nonempty Codex prompt.' }
+    const dir = input.dir ? resolveDir(sessionCwd, input.dir) : sessionCwd
+    if (!dir) return { deny: 'No project directory found.' }
+    const outcome = await runCodex($, { account: input.account, prompt: input.prompt, cwd: dir,
+      model: input.model, effort: input.effort, readOnly: input.readOnly })
+    const status = outcome.ok ? 'completed' : 'FAILED'
+    return { result: [
+      'Codex ' + outcome.account + ': ' + status + ' (exit ' + outcome.exitCode + ')',
+      ...(outcome.threadId ? ['thread: ' + outcome.threadId] : []),
+      ...(outcome.error ? ['error: ' + outcome.error] : []),
+      outcome.answer || '(no agent answer)',
+    ].join('\n\n') }
+  }).catch(($, e, next) => ({ deny: 'Codex delegation failed unexpectedly. Check CLI and account configuration.' }))
 
   on('tool.call', { tool: DECIDE_TOOL }, async ($, e) => {
     const input: DecideInput = e

@@ -208,3 +208,39 @@ Ratings show as the panel's health dots in the free and paid model lists, as `Un
 ## Developing
 
 `scripts/check.sh` runs everything a release must pass: `claude plugin validate .`, `claude plugin test .`, the scripts' Python tests, and `scripts/typecheck.sh`. GitHub Actions runs all but the type-check on every push and pull request (the engine types it needs exist only where Claude Code has run). AGENTS.md describes the layout and the rules the validator enforces.
+
+## Dual Codex Subscription Bridge (draft)
+
+The plugin registers `delegate_codex`, allowing Claude to delegate a read-only review or an editing task to **either of two explicitly selected ChatGPT-authenticated Codex CLI profiles**. No OpenAI API key is needed when Codex is authenticated with ChatGPT. The profiles share neither login state nor Codex sessions. The bridge deliberately does not alternate accounts automatically to bypass usage restrictions.
+
+### Windows 11 setup
+
+Install the official Codex CLI first. Ensure a native `codex.exe` is available (rather than only an npm `.cmd` shim). In PowerShell, create separate home directories and sign in separately:
+
+```powershell
+$base = Join-Path $HOME '.codex-profiles'
+$pro1 = Join-Path $base 'pro-1'
+$pro2 = Join-Path $base 'pro-2'
+New-Item -ItemType Directory -Force $pro1, $pro2 | Out-Null
+$env:CODEX_HOME = $pro1
+codex login
+$env:CODEX_HOME = $pro2
+codex login
+Remove-Item Env:CODEX_HOME
+```
+
+Use the first ChatGPT account for the first login and the second account for the second login. Never commit either profile or its authentication files; both stay under your home folder. Check which executable is found with `where.exe codex`.
+
+### Calling the tool
+
+Claude invokes `mcp__opencode-go__delegate_codex` with `account: "pro-1"` or `"pro-2"`, `prompt`, optional `dir`, `model` and `effort`. `readOnly` defaults to true; set it false only to authorize workspace editing. The tool runs `codex exec --json` in the specified directory and returns the final answer, thread id if available, or a failure diagnostic. Different accounts may run in parallel, but **do not send simultaneous editing agents into the same checkout**; isolate worktrees before invoking them.
+
+Codex CLI subscription entitlements, rate limits, supported models and effort levels can change. The plugin does not promise specific quota amounts or automatically switch accounts on exhaustion. This first version does not integrate Codex into the existing OpenCode panel, batch scheduler, verification loop or automatic ladder. It provides the foundational explicit account delegation tool.
+
+### Validation before merge
+
+- Run `scripts/check.sh` and validate against your actual installed Claude Code plugin engine.
+- Run both account logins and verify each profile independently in the same environment as the Claude plugin.
+- Run read-only on both accounts, an explicitly approved editing task in an isolated test repository, and inspect the JSONL result.
+- Test invalid login, missing CLI, unsupported model/effort and rate-limit failure handling on Windows 11 and Linux.
+- Verify paths containing spaces, cancellation/timeout behavior, credentials redaction, and parallel independent profiles.
