@@ -22,6 +22,7 @@ export const HELP = [
   '  /opencode history              recent batches and spend by model',
   '  /opencode status               what is running and what it cost',
   '  /opencode local [start|stop|setup] [kev|laya]  local decision models',
+  '  /opencode freebuff             show interactive Freebuff handoff guidance',
   '  /opencode selftest             check opencode, model sources, local models, hangs, rate limits and notifications',
   '  /opencode help                 this list',
 ].join('\n')
@@ -143,4 +144,16 @@ export function historyText(history: BatchSummary[], spendByModel: Record<string
     byModel.length > 0 ? `Spend by model:\n${byModel.join('\n')}` : '',
   ]
   return lines.filter(line => line !== '').join('\n\n')
+}
+
+
+/** No supported free headless/SDK interface exists today. */
+export function freebuffText(task = ''): string {
+  return [
+    'Freebuff is currently interactive-only and cannot be an unattended worker or automatic fallback.',
+    'Follow the official Freebuff installation instructions, sign in normally, and launch freebuff from your project directory.',
+    'Paste the task into the Freebuff chat. Do not attempt to reuse device OAuth tokens in an undocumented API or bypass advertisements.',
+    ...(task.trim() ? ['', 'Task to paste into Freebuff:', task.trim()] : []),
+    'Headless support request: https://github.com/CodebuffAI/freebuff/issues/947',
+  ].join('\n')
 }
