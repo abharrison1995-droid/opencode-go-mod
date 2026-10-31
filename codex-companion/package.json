@@ -1,0 +1,16 @@
+{
+  "name": "agent-subscription-bridge-codex",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test server/*.test.mjs",
+    "check": "node --check server/index.mjs && node --check server/runner.mjs && npm test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  }
+}
