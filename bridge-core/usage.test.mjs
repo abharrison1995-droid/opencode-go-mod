@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { buildOpenCodeUsageArgs, createProviderQueries, getUsage, locateCli, parseAntigravityUsage, parseCodexRateLimits, parseOpenCodeUsage, sanitizeDiagnostic, supportsOpenCodeApi } from './usage.mjs'
 
@@ -14,7 +14,7 @@ test('Gemini Windows discovery checks the default Antigravity install directory'
   const expected = join(localAppData, 'agy', 'bin', 'agy.exe')
   try {
     await mkdir(join(localAppData, 'agy', 'bin'), { recursive:true })
-    await writeFile(expected, '')
+    await writeFile(expected, '', { mode:0o755 })
     assert.equal(await locateCli('gemini', { LOCALAPPDATA:localAppData, PATH:'' }, 'win32'), expected)
   } finally {
     await rm(localAppData, { recursive:true, force:true })
@@ -56,12 +56,13 @@ test('OpenCode uses the server returned meters and does not invent missing perce
 })
 
 test('OpenCode usage calls the documented local API with an explicit GET method', () => {
-  const args = buildOpenCodeUsageArgs('C:\\projects\\bridge with spaces')
+  const workspace = process.platform === 'win32' ? 'C:\\projects\\bridge with spaces' : join(tmpdir(), 'bridge with spaces')
+  const args = buildOpenCodeUsageArgs(workspace)
   assert.equal(args[0], 'api')
   assert.equal(args[1], 'GET')
   const route = new URL(`http://127.0.0.1${args[2]}`)
   assert.equal(route.pathname, '/api/experimental/usage/limits')
-  assert.equal(route.searchParams.get('directory'), 'C:\\projects\\bridge with spaces')
+  assert.equal(route.searchParams.get('directory'), resolve(workspace))
   assert.equal(supportsOpenCodeApi('Commands:\n  api  make a request to a running server\n  run  submit prompt'), true)
   assert.equal(supportsOpenCodeApi('Commands:\n  run  submit prompt\n  serve start server'), false)
 })
