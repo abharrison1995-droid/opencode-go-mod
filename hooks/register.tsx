@@ -779,7 +779,7 @@ export const register: Register = (on, options) => {
     if (sub === 'model') {
       if (rest === '') return { text: 'Usage: /opencode model <name>.' }
       const { free, paid, plan } = worker(await models())
-      const found = matchModel([...free, ...paid, ...plan], rest, fullId)
+      const found = matchModel([...free, ...paid, ...plan, ...(worker(await models())).gemini], rest, fullId)
       if ('text' in found) return found
       await pick($, found.model.id)
       return { text: `Worker: ${found.model.name} (${found.model.id})` }
