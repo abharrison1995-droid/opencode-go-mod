@@ -18,6 +18,13 @@
 
 The old pull requests were all open during the audit; #1–#3 were drafts, and #4 was not. Their green checks were not treated as acceptance of the untested host runtimes.
 
+## Integration branch validation
+
+- Latest commit: `c8c738a7dc59ceb7a70cae8733f5f8e35d464019` on `codex/agent-subscription-bridge`.
+- GitHub Actions run [#41198725480](https://github.com/abharrison1995-droid/opencode-go-mod/actions/runs/41198725480) completed successfully: Claude plugin validation, 205 Claude tests, Python script tests, host package validation, and the Codex MCP/usage checks all passed.
+- Local `npm run check --prefix codex-companion` passes all 32 tests and confirms the committed bundle matches a clean build. `node scripts/validate-host-packages.mjs` and `git diff --check` also pass.
+- Claude's validator reports a non-fatal warning that root `CLAUDE.md` is not loaded as plugin context. The working instructions also ship in skills; the warning does not affect this successful validation.
+
 ## Integration choices
 
 1. Keep the Claude plugin at the repository root and the Codex plugin in `codex-companion/`. Installation routing states that the destination application selects the package.
