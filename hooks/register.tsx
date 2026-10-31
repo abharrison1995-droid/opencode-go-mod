@@ -7,7 +7,7 @@ import type { BatchRunSpec, BatchTaskSpec, Isolation, RunnerDefaults, TaskResult
 import { costsMoney, findOpencode, fullId, isFree, isPlan, loadCatalog, price, readCache, worker, writeCache } from './catalog'
 import { checkPrompt, isAgyId, MAX_PLANNED, NO_GEMINI, parsePlan, pickChecker, planPrompt } from './gemini'
 import type { Plan } from './gemini'
-import { batchesText, diffText, effortText, HELP, historyText, localText, setupText, matchJob, matchModel, modelsText, parseArgs, presetsText, statusText } from './commands'
+import { batchesText, diffText, effortText, HELP, historyText, localText, setupText, matchJob, matchModel, modelsText, parseArgs, presetsText, freebuffText, statusText } from './commands'
 import { chatTools, explainError, readKey, requestBody, sendWithRetry, toMessages } from './chat'
 import { cancel, track, tracked, untrack } from './control'
 import { attachedChars, budgetMessage, contextVerdict, contextWarning, dailySpent, formatReport, localDate, notify, overContext, resolveDir, runResilient } from './delegate'
@@ -770,6 +770,7 @@ export const register: Register = (on, options) => {
     }
 
     if (sub === 'help') return { text: HELP }
+    if (sub === 'freebuff') return { text: freebuffText(rest) }
 
     if (sub === 'selftest') {
       const local = await localOpts($, options, localDir)
@@ -779,7 +780,7 @@ export const register: Register = (on, options) => {
     if (sub === 'model') {
       if (rest === '') return { text: 'Usage: /opencode model <name>.' }
       const { free, paid, plan } = worker(await models())
-      const found = matchModel([...free, ...paid, ...plan], rest, fullId)
+      const found = matchModel([...free, ...paid, ...plan, ...(worker(await models())).gemini], rest, fullId)
       if ('text' in found) return found
       await pick($, found.model.id)
       return { text: `Worker: ${found.model.name} (${found.model.id})` }
