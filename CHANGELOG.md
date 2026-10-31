@@ -4,6 +4,18 @@ All notable changes to this project are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- Shared read-only subscription telemetry for OpenCode Go, two isolated Codex Pro profiles and Antigravity, with honest unavailable/stale states and no inferred quota values.
+- Claude sidebar subscription usage and a Codex-native MCP companion with a loopback dashboard, cancellable jobs, metadata-only history and an isolated planner/reviewer worktree pipeline.
+- Host-specific installation routing, packaged Codex MCP bundle checks and CI coverage for both host packages.
+
+### Changed
+
+- Local Z.AI/Gemini task counts are identified as estimates and are not presented as server-reported remaining quota.
+
 ## [0.11.2]
 
 ### Added

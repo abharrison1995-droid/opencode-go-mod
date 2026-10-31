@@ -5,6 +5,7 @@
 - Base: `main` at `1c5558dda71acea2ce70b684d8e99b4d852e7afa`.
 - Integration branch: `codex/agent-subscription-bridge`.
 - The branch preserves the existing PR histories by incorporating PR #1, then #2, then #3. PR #4's installation guidance was checked against PR #3 and adds no distinct file changes. No remote PR was merged, no `main` push was made, and no release was published.
+- Draft integration PR [#5](https://github.com/abharrison1995-droid/opencode-go-mod/pull/5) is open against `main`; the successful Actions run recorded during this audit is #41198897383. No existing PR was changed or merged.
 - Freebuff remains excluded from the final PR #1 diff against `main`.
 
 ## Existing pull request audit
@@ -20,7 +21,7 @@ The old pull requests were all open during the audit; #1–#3 were drafts, and #
 
 ## Integration branch validation
 
-- GitHub Actions run [#41198801536](https://github.com/abharrison1995-droid/opencode-go-mod/actions/runs/41198801536) on revision `a2c8387414a1e14d16df3ebd46db432d30580d3c` completed successfully: Claude plugin validation, 205 Claude tests, Python script tests, host package validation, and the Codex MCP/usage checks all passed.
+- GitHub Actions run [#41198897383](https://github.com/abharrison1995-droid/opencode-go-mod/actions/runs/41198897383) on revision `277ff3a37e2efbb365c1e2df99ba474ba8f21798` completed successfully: Claude plugin validation, 205 Claude tests, Python script tests, host package validation, and the Codex MCP/usage checks all passed.
 - Local `npm run check --prefix codex-companion` passes all 32 tests and confirms the committed bundle matches a clean build. `node scripts/validate-host-packages.mjs` and `git diff --check` also pass.
 - Claude's validator reports a non-fatal warning that root `CLAUDE.md` is not loaded as plugin context. The working instructions also ship in skills; the warning does not affect this successful validation.
 
@@ -72,4 +73,4 @@ The independent reviewer’s earlier suite count was 16 and it did not rerun the
 
 ## Safe review order
 
-Review this integration PR as a single diff against `main`. Do not merge PRs #1–#4 first: PRs #1–#3 are preserved in the integration history and PR #4 duplicates docs in PR #3. If the owner elects to land the old work independently instead, use #1 → #2 → #3 → #4, with #4 only after its source documentation is settled. Keep all PRs unmerged until external audit accepts the code and the native-runtime blockers are reviewed.
+Review PR #5 as a single diff against `main`. Do not merge PRs #1–#4 first: PRs #1–#3 are preserved in the integration history and PR #4 duplicates docs in PR #3. If the owner elects to land the old work independently instead, use #1 → #2 → #3; PR #4 adds no distinct changes and can be skipped. Keep all PRs unmerged until external audit accepts the code and the native-runtime blockers are reviewed.

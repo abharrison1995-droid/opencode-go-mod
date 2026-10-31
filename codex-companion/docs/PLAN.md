@@ -1,15 +1,15 @@
-# Cross-host engineering plan
+# Cross-host implementation status
 
-C0: portable Codex plugin, self-contained bundled MCP server, skill, CLI discovery, read-only OpenCode / Claude Code / Antigravity delegation, explicit editing gate and parser tests. Source is present; Codex desktop discovery remains to verify on the owner's installation.
+This file records the current implementation and remaining verification for draft [PR #5](https://github.com/abharrison1995-droid/opencode-go-mod/pull/5). It is not a roadmap of unimplemented code.
 
-C1: share provider-neutral usage normalization, cache/backoff, Codex profile path and Codex JSONL parsing across both host packages. The Codex plugin receives generated copies of canonical shared modules so its installed package remains self-contained; CI checks byte identity. Do not duplicate OAuth or private credentials.
+- **Host packages:** Claude Code remains at the repository root. The Codex companion uses its own plugin manifest, MCP server, skill and loopback dashboard. Host selection follows the destination application.
+- **Shared engine:** canonical provider-usage and Codex profile/JSONL helpers live in `bridge-core/`. The Codex package has generated local copies; CI checks identity and checks the committed bundle against a fresh build.
+- **Delegation:** OpenCode, Codex Pro profiles, Claude Code and Antigravity are selectable workers. Jobs are cancellable and bounded. Fallback is explicit and limited to classified missing-CLI, authentication and rate-limit failures; Codex profiles never rotate automatically.
+- **Editing workflow:** planner → implementer → independent reviewer → allow-listed verifier runs in a new worktree from committed `HEAD`. All reachable implementer and reviewer routes must be independent. One verification retry is allowed (two verification runs maximum). The pipeline preserves the worktree and never merges or pushes. Editing requires per-task opt-in and `BRIDGE_ENABLE_WRITES=1`.
+- **Usage:** read-only telemetry covers OpenCode Go, both Codex profiles and Antigravity. Missing structured values remain unavailable/details. Z.AI model selection remains through OpenCode, but it has no dedicated server-reported quota adapter. Local task counts are never presented as remaining server quota.
+- **Verification:** GitHub Actions run [#41198897383](https://github.com/abharrison1995-droid/opencode-go-mod/actions/runs/41198897383) passed Claude validation/tests, Python tests, host routing and Codex checks. Local Codex validation passes 32 tests. The MCP bundle starts in an isolated directory.
+- **Still open:** Codex Desktop marketplace discovery, authenticated Codex Pro reads, OpenCode usage with a CLI exposing the documented API, and structured Antigravity quota data need owner-machine verification. The separate Claude host type-check needs engine declarations.
 
-C2: the two independently authenticated Codex Pro accounts now have explicit delegation and read-only usage reads. The Codex desktop's native agent is primary. Account selection is explicit and never used for automatic quota-circumvention.
+The verifier process receives an environment allowlist, but test code is not OS-sandboxed and retains the current user's filesystem permissions. Use trusted repositories only. Never access, copy, log or commit provider credentials. See [`../../docs/INTEGRATION-AUDIT.md`](../../docs/INTEGRATION-AUDIT.md) for detailed findings and live results.
 
-C3: server-reported usage adapters for Go, Codex Pro 1/2 and Google AI Pro, normalized windows, caching/backoff and unavailable/stale states are implemented. Confirm the current Antigravity structured schema and real account reads on the owner's authenticated machine. Never treat local task counters as actual remaining quota.
-
-C4: asynchronous cancellable delegation and metadata-only history; planner/implementer/independent-reviewer workflow in isolated worktrees; up to two verification rounds; explicit single cross-provider fallbacks for classified missing-CLI, unauthenticated and rate-limited failures. Multiple pipeline jobs can run concurrently with a hard cap. Verification commands are allow-listed. No implicit pushes or merges.
-
-C5: the Claude panel renders subscription readings; Codex uses its native MCP/skill integration plus a loopback-only local dashboard. Provider parser and MCP bundle checks pass locally. Live desktop discovery, authenticated account reads and the Claude-specific checks still need the owner-installed host runtimes. No injection into Codex internals.
-
-Freebuff remains excluded. Neither existing draft PR is merged.
+PRs #1–#4 remain unmerged. PR #1–#3 histories are preserved in this branch; PR #4 duplicates installation documentation already present in PR #3. PR #5 is also a draft and awaits external audit/owner acceptance.

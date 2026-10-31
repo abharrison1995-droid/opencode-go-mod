@@ -5,7 +5,7 @@
 | User's target application | Package to install | Current source |
 | --- | --- | --- |
 | **Claude Code (CLI or Claude plugin UI)** | **Repository root**: `.claude-plugin/` plus `hooks/` and `types/` | Available on `main` |
-| **Codex desktop / Codex CLI** | **`codex-companion/`** (portable `plugin.json`, `mcp.json`, `skills/`, `server/`) | Integration review branch `codex/agent-subscription-bridge` — NOT yet on `main` |
+| **Codex desktop / Codex CLI** | **`codex-companion/`** (portable `plugin.json`, `mcp.json`, `skills/`, `server/`) | Draft [PR #5](https://github.com/abharrison1995-droid/opencode-go-mod/pull/5), branch `codex/agent-subscription-bridge` — not yet on `main`; Actions run [#41198897383](https://github.com/abharrison1995-droid/opencode-go-mod/actions/runs/41198897383) passed on revision `277ff3a` |
 
 **Never install the Claude root plugin as the Codex variant, or the Codex companion as the Claude variant.** A Claude agent can install the Codex version if the user asks for Codex; a Codex agent can install the Claude version if the user asks for Claude. If the destination truly is unknown, ask before changing the environment.
 
@@ -36,7 +36,7 @@ If the installed marketplace metadata ever changes, verify those names instead o
 ```bash
 git clone --branch codex/agent-subscription-bridge --single-branch https://github.com/abharrison1995-droid/opencode-go-mod.git
 cd opencode-go-mod/codex-companion
-npm install
+npm ci
 npm run check
 ```
 
