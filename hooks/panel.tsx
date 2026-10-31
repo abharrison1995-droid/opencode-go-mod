@@ -188,7 +188,7 @@ export function panel(elements: ElementTable, surface: RenderSurface, v: PanelVi
     })
     return (
       <Box key={key} flexDirection="column">
-        <Button plain onPress={() => act.fold(key, !open)}>
+        <Button key={`${key}:toggle`} plain onPress={() => act.fold(key, !open)}>
           <Text bold color={color}>{open ? '▾ ' : '▸ '}{USAGE_LABELS[snapshot.provider]}{account}</Text>
           <Text dimColor> · {usageStatus(snapshot)}</Text>
           {snapshot.lastSuccessAt !== undefined && <Text dimColor> · {ageOf(snapshot.lastSuccessAt)}</Text>}
