@@ -208,3 +208,8 @@ Ratings show as the panel's health dots in the free and paid model lists, as `Un
 ## Developing
 
 `scripts/check.sh` runs everything a release must pass: `claude plugin validate .`, `claude plugin test .`, the scripts' Python tests, and `scripts/typecheck.sh`. GitHub Actions runs all but the type-check on every push and pull request (the engine types it needs exist only where Claude Code has run). AGENTS.md describes the layout and the rules the validator enforces.
+
+
+## Freebuff (interactive handoff)
+
+Use `/opencode freebuff` for setup guidance or `/opencode freebuff <task>` to prepare an interactive task handoff. The free Freebuff CLI currently has no supported unattended headless/SDK interface, so Freebuff is not an automatic delegate or fallback. Follow [upstream issue #947](https://github.com/CodebuffAI/freebuff/issues/947) for supported headless access. Do not proxy device tokens or bypass the ad-supported interface.
