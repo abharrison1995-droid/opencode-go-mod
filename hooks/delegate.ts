@@ -1,7 +1,7 @@
 import type { EngineInterface } from 'claude-code'
 
 import type { Phase, WorkerModel } from '../types'
-import { AGY_STALL_MS, agyArgv, conversationIn, findAgy, isAgyId } from './gemini'
+import { AGY_STALL_MS, agyArgv, conversationIn, findAgy, isAgyId, parseAgyResponse } from './gemini'
 import { homeOf, isAbsolute, posixArgv, shArgv } from './platform'
 
 export type Run = {
@@ -291,8 +291,21 @@ async function runAgy(
   const argv = agyArgv(bin, { model: o.model, level: o.level, sessionId: o.sessionId, readOnly: o.readOnly, files: o.files, prompt: o.prompt, logFile })
   try {
     const result = await runOpencode($, argv, o.cwd, onProgress, { stallMs: Math.max(o.stallMs, AGY_STALL_MS), signal: o.signal, format: 'text' })
+    if (result.reason !== 'cancelled' && result.reason !== 'hung') {
+      const parsed = parseAgyResponse(result.run.text)
+      result.run.text = parsed.response
+      if (parsed.error !== undefined) result.run.errors.push(parsed.error)
+      if (parsed.status !== 'SUCCESS') {
+        result.reason = /429|rate.limit|quota|exhausted|unavailable|overloaded/i.test(parsed.error ?? '')
+          ? 'rate-limited' : 'failed'
+      } else if (result.reason === 'ok' && parsed.response.trim() === '') {
+        result.run.errors.push('Antigravity reported SUCCESS but returned an empty response.')
+        result.reason = 'failed'
+      }
+      result.run.sessionId = parsed.conversationId
+    }
     const log = await $.fs.read(logFile).catch(() => '')
-    result.run.sessionId = conversationIn(typeof log === 'string' ? log : '') ?? o.sessionId
+    result.run.sessionId ??= conversationIn(typeof log === 'string' ? log : '') ?? o.sessionId
     // agy reports no steps: each run counts as one call on the plan.
     result.run.steps = 1
     return result
