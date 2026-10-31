@@ -213,7 +213,7 @@ test('goal mode needs Gemini, and a batch needs tasks or a goal', async ($, on) 
 
 test('a checker named in the call plans with that model and level', async ($, on) => {
   const spawned: SpawnCall[] = []
-  engine(on, { spawned, agyRun: () => ({ stdout: PLAN }) })
+  engine(on, { spawned, agyRun: () => ({ stdout: JSON.stringify({ status: 'SUCCESS', response: PLAN }) }) })
   await start($)
 
   const ran = await $.tool.call(batch({ title: 'goal', goal: 'build both parts', isolation: 'none', checker: 'gemini-3.8-flash', checkerEffort: 'high' }) as any)
@@ -225,7 +225,7 @@ test('a checker named in the call plans with that model and level', async ($, on
 test('Gemini planning shows as a running agent, gone once the plan is in', async ($, on) => {
   const spawned: SpawnCall[] = []
   const status: (string | undefined)[] = []
-  engine(on, { spawned, status, agyRun: () => ({ stdout: PLAN }) })
+  engine(on, { spawned, status, agyRun: () => ({ stdout: JSON.stringify({ status: 'SUCCESS', response: PLAN }) }) })
   await start($)
 
   await $.tool.call(batch({ title: 'goal', goal: 'build both parts', isolation: 'none' }) as any)
