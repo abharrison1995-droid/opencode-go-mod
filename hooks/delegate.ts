@@ -296,7 +296,8 @@ async function runAgy(
       result.run.text = parsed.response
       if (parsed.error !== undefined) result.run.errors.push(parsed.error)
       if (parsed.status !== 'SUCCESS') {
-        result.reason = /429|rate.limit|quota|exhausted|unavailable|overloaded/i.test(parsed.error ?? '')
+        const diagnostic = [parsed.error, result.stderr].filter(Boolean).join(' ')
+        result.reason = /429|rate.limit|quota|exhausted|unavailable|overloaded/i.test(diagnostic)
           ? 'rate-limited' : 'failed'
       } else if (result.reason === 'ok' && parsed.response.trim() === '') {
         result.run.errors.push('Antigravity reported SUCCESS but returned an empty response.')
