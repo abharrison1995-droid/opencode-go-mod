@@ -1,0 +1,22 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "agent-subscription-bridge",
+  "version": "0.1.0",
+  "description": "Codex companion for local coding-agent delegation and subscription telemetry",
+  "repository": "https://github.com/abharrison1995-droid/opencode-go-mod",
+  "license": "MIT",
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/delegate/SKILL.md",
+      "interface": {
+        "displayName": "Agent Subscription Bridge",
+        "shortDescription": "Delegate work to local subscription agents",
+        "developerName": "harkuo.digital",
+        "category": "Developer Tools",
+        "capabilities": [
+          "Read"
+        ]
+      }
+    }
+  }
+}

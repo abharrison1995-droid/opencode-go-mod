@@ -1,4 +1,13 @@
-# opencode-go
+# OpenCode Go Mod — Claude Code AND Codex variants
+
+> **HOST SELECTION FOR INSTALLERS:** There are **two versions**, depending on where the user wants the mod installed. **Claude Code:** install the package at this repository's **root** (`.claude-plugin/`). **Codex desktop / CLI:** install the separate **`codex-companion/`** package, currently on [draft PR #3](https://github.com/abharrison1995-droid/opencode-go-mod/pull/3) / branch `feat/codex-desktop-companion`, **not yet on `main`**. A Claude agent installing for Codex must choose Codex; a Codex agent installing for Claude must choose Claude. **Never swap the package types.**
+
+| Destination | Correct package | Installation guide |
+| --- | --- | --- |
+| **Claude Code** | Root `.claude-plugin/` | [Claude instructions](docs/INSTALLATION.md#for-a-fresh-claude-code-environment) |
+| **Codex** | `codex-companion/` (draft) | [Codex instructions](docs/INSTALLATION.md#for-a-fresh-codex-desktop--cli-environment) |
+
+Read **[docs/INSTALLATION.md](docs/INSTALLATION.md)** before installing or instructing another agent. Existing feature details below are for the **Claude variant**.
 
 A Claude Code mod that lets Claude delegate tasks to cheaper models through the `opencode` CLI: an [OpenCode Go](https://opencode.ai) subscription, Zen's free models, a [Z.AI Coding Plan](https://z.ai) if you have one, and Gemini on a Google AI Pro plan through the Antigravity CLI. Claude plans and reviews; workers do the routine work. Gemini can also take the planning and checking off Claude's hands (goal mode).
 
